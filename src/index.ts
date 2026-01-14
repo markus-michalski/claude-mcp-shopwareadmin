@@ -1,0 +1,613 @@
+#!/usr/bin/env node
+
+import { Server } from '@modelcontextprotocol/sdk/server/index.js';
+import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
+import {
+  CallToolRequestSchema,
+  ListToolsRequestSchema,
+} from '@modelcontextprotocol/sdk/types.js';
+
+import { loadConfig, validateConfig } from './config/Configuration.js';
+import { Logger } from './infrastructure/logging/Logger.js';
+import { InMemoryCache } from './infrastructure/cache/InMemoryCache.js';
+import { ShopwareAuthenticator } from './infrastructure/shopware/ShopwareAuthenticator.js';
+import { ShopwareApiClient } from './infrastructure/shopware/ShopwareApiClient.js';
+import { WikiJsService } from './infrastructure/wikijs/WikiJsService.js';
+import { MCPError } from './core/domain/Errors.js';
+
+// Import services
+import { ProductService } from './core/services/ProductService.js';
+import { CategoryService } from './core/services/CategoryService.js';
+import { ContentService } from './core/services/ContentService.js';
+import { SnippetService } from './core/services/SnippetService.js';
+import { ManufacturerService } from './core/services/ManufacturerService.js';
+import { PropertyService } from './core/services/PropertyService.js';
+
+// Import schemas
+import {
+  ProductCreateInput,
+  ProductGetInput,
+  ProductListInput,
+  ProductSetActiveInput,
+  ProductUpdateInput,
+  SearchProductsInput,
+  CategoryListInput,
+  CategoryGetInput,
+  CategoryGenerateContentInput,
+  ProductGenerateContentInput,
+  ProductGenerateSeoInput,
+  VariantGenerateContentInput,
+  ContentUpdateInput,
+  GetPropertiesInput,
+  GetManufacturersInput,
+  SnippetListInput,
+} from './application/schemas.js';
+
+// Load configuration
+const config = loadConfig();
+validateConfig(config);
+
+// Initialize infrastructure
+const logger = new Logger(config.logLevel);
+const cache = new InMemoryCache(logger);
+
+// Initialize Shopware API client
+const authenticator = new ShopwareAuthenticator(
+  config.shopware.url,
+  config.shopware.clientId,
+  config.shopware.clientSecret,
+  logger
+);
+const shopwareApi = new ShopwareApiClient(config.shopware.url, authenticator, logger);
+
+// Initialize Wiki.js service
+const wikiService = new WikiJsService(config.wikijs.baseUrl, cache, logger);
+
+// Initialize business services
+const productService = new ProductService(shopwareApi, cache, logger);
+const categoryService = new CategoryService(shopwareApi, cache, logger);
+const snippetService = new SnippetService(shopwareApi, cache, logger);
+const manufacturerService = new ManufacturerService(shopwareApi, cache, logger);
+const propertyService = new PropertyService(shopwareApi, cache, logger);
+const contentService = new ContentService(
+  productService,
+  categoryService,
+  snippetService,
+  wikiService,
+  logger
+);
+
+// Create MCP server
+const server = new Server(
+  {
+    name: 'claude-mcp-shopwareadmin',
+    version: '0.1.0',
+  },
+  {
+    capabilities: {
+      tools: {},
+    },
+  }
+);
+
+// Define available tools
+server.setRequestHandler(ListToolsRequestSchema, async () => ({
+  tools: [
+    // === PRODUCT TOOLS ===
+    {
+      name: 'product_create',
+      description: 'Create a new product (ALWAYS created as inactive for safety). Returns the created product with ID.',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          name: { type: 'string', minLength: 1, maxLength: 255, description: 'Product name' },
+          productNumber: { type: 'string', minLength: 1, maxLength: 64, description: 'Unique product number/SKU' },
+          price: { type: 'number', exclusiveMinimum: 0, description: 'Gross price in EUR' },
+          categoryId: { type: 'string', format: 'uuid', description: 'Category ID' },
+          description: { type: 'string', maxLength: 65535, description: 'Product description (HTML)' },
+          ean: { type: 'string', maxLength: 50, description: 'EAN/GTIN barcode' },
+          manufacturerId: { type: 'string', format: 'uuid', description: 'Manufacturer ID' },
+          taxId: { type: 'string', format: 'uuid', description: 'Tax rate ID (defaults to 19%)' },
+          stock: { type: 'integer', minimum: 0, default: 0, description: 'Initial stock' },
+        },
+        required: ['name', 'productNumber', 'price', 'categoryId'],
+      },
+    },
+    {
+      name: 'product_get',
+      description: 'Get product details including variants, media, properties. Identify by ID or product number.',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          id: { type: 'string', format: 'uuid', description: 'Product ID (UUID)' },
+          productNumber: { type: 'string', description: 'Product number/SKU' },
+        },
+      },
+    },
+    {
+      name: 'product_list',
+      description: 'List products with optional filters for category, status, and search',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          categoryId: { type: 'string', format: 'uuid', description: 'Filter by category' },
+          active: { type: 'boolean', description: 'Filter by active status' },
+          search: { type: 'string', maxLength: 255, description: 'Search in name/number' },
+          limit: { type: 'integer', minimum: 1, maximum: 100, default: 25, description: 'Max results' },
+          offset: { type: 'integer', minimum: 0, default: 0, description: 'Pagination offset' },
+        },
+      },
+    },
+    {
+      name: 'product_set_active',
+      description: 'Activate or deactivate a product (controls visibility in shop)',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          id: { type: 'string', format: 'uuid', description: 'Product ID' },
+          active: { type: 'boolean', description: 'New active status' },
+        },
+        required: ['id', 'active'],
+      },
+    },
+    {
+      name: 'product_update',
+      description: 'Update product data (name, price, description, stock, etc.)',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          id: { type: 'string', format: 'uuid', description: 'Product ID' },
+          name: { type: 'string', minLength: 1, maxLength: 255, description: 'New name' },
+          price: { type: 'number', exclusiveMinimum: 0, description: 'New price' },
+          description: { type: 'string', maxLength: 65535, description: 'New description' },
+          ean: { type: 'string', maxLength: 50, description: 'New EAN' },
+          stock: { type: 'integer', minimum: 0, description: 'New stock' },
+          manufacturerId: { type: 'string', format: 'uuid', description: 'New manufacturer' },
+        },
+        required: ['id'],
+      },
+    },
+    {
+      name: 'search_products',
+      description: 'Full-text search across all products',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          query: { type: 'string', minLength: 2, maxLength: 255, description: 'Search term' },
+          limit: { type: 'integer', minimum: 1, maximum: 50, default: 20, description: 'Max results' },
+        },
+        required: ['query'],
+      },
+    },
+
+    // === CONTENT GENERATION TOOLS ===
+    {
+      name: 'product_generate_content',
+      description: 'Generate a content prompt for product description with automatic style detection (creative vs software)',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          productId: { type: 'string', format: 'uuid', description: 'Product ID' },
+          style: { type: 'string', enum: ['creative', 'software'], description: 'Force specific style' },
+          maxLength: { type: 'integer', minimum: 200, maximum: 5000, default: 1000, description: 'Max chars' },
+          includeSnippets: { type: 'boolean', default: true, description: 'Include snippets (software only)' },
+          snippetIds: { type: 'array', items: { type: 'string' }, description: 'Specific snippets to include' },
+        },
+        required: ['productId'],
+      },
+    },
+    {
+      name: 'product_generate_seo',
+      description: 'Generate SEO metadata (meta title, description, keywords) for a product',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          productId: { type: 'string', format: 'uuid', description: 'Product ID' },
+          style: { type: 'string', enum: ['creative', 'software'], description: 'Force specific style' },
+          maxTitleLength: { type: 'integer', minimum: 30, maximum: 70, default: 60, description: 'Max title length' },
+          maxDescriptionLength: { type: 'integer', minimum: 100, maximum: 160, default: 155, description: 'Max description length' },
+        },
+        required: ['productId'],
+      },
+    },
+    {
+      name: 'variant_generate_content',
+      description: 'Generate variant-specific description (inherits parent context)',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          variantId: { type: 'string', format: 'uuid', description: 'Variant product ID' },
+          inheritFromParent: { type: 'boolean', default: true, description: 'Inherit parent context' },
+          focusOnOptions: { type: 'boolean', default: true, description: 'Emphasize variant options' },
+        },
+        required: ['variantId'],
+      },
+    },
+    {
+      name: 'content_update',
+      description: 'Save generated content (description, SEO) to a product',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          productId: { type: 'string', format: 'uuid', description: 'Product ID' },
+          description: { type: 'string', maxLength: 65535, description: 'New description (HTML)' },
+          metaTitle: { type: 'string', maxLength: 255, description: 'SEO title' },
+          metaDescription: { type: 'string', maxLength: 255, description: 'SEO description' },
+          keywords: { type: 'string', maxLength: 255, description: 'Keywords (comma-separated)' },
+        },
+        required: ['productId'],
+      },
+    },
+
+    // === CATEGORY TOOLS ===
+    {
+      name: 'category_list',
+      description: 'Get category tree structure',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          parentId: { type: 'string', format: 'uuid', description: 'Only children of this category' },
+          depth: { type: 'integer', minimum: 1, maximum: 10, default: 3, description: 'Tree depth' },
+          includeInactive: { type: 'boolean', default: false, description: 'Include inactive categories' },
+        },
+      },
+    },
+    {
+      name: 'category_get',
+      description: 'Get category details with optional product list',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          id: { type: 'string', format: 'uuid', description: 'Category ID' },
+          includeProducts: { type: 'boolean', default: false, description: 'Include products' },
+          productLimit: { type: 'integer', minimum: 1, maximum: 100, default: 25, description: 'Max products' },
+        },
+        required: ['id'],
+      },
+    },
+    {
+      name: 'category_generate_content',
+      description: 'Generate SEO text prompt for a category',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          id: { type: 'string', format: 'uuid', description: 'Category ID' },
+          style: { type: 'string', enum: ['creative', 'software'], description: 'Force specific style' },
+          maxLength: { type: 'integer', minimum: 100, maximum: 2000, default: 500, description: 'Max chars' },
+        },
+        required: ['id'],
+      },
+    },
+
+    // === HELPER TOOLS ===
+    {
+      name: 'get_properties',
+      description: 'Get available properties and options (for filtering/assigning)',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          groupId: { type: 'string', format: 'uuid', description: 'Filter by property group' },
+        },
+      },
+    },
+    {
+      name: 'get_manufacturers',
+      description: 'List manufacturers/brands',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          search: { type: 'string', maxLength: 100, description: 'Search manufacturer names' },
+          limit: { type: 'integer', minimum: 1, maximum: 100, default: 50, description: 'Max results' },
+        },
+      },
+    },
+    {
+      name: 'snippet_list',
+      description: 'List available product snippets for software descriptions',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          activeOnly: { type: 'boolean', default: true, description: 'Only active snippets' },
+          locale: { type: 'string', enum: ['de-DE', 'en-GB'], default: 'de-DE', description: 'Language' },
+        },
+      },
+    },
+  ],
+}));
+
+// Handle tool calls
+server.setRequestHandler(CallToolRequestSchema, async (request) => {
+  const { name, arguments: args } = request.params;
+
+  try {
+    switch (name) {
+      // === PRODUCT TOOLS ===
+      case 'product_create': {
+        const input = ProductCreateInput.parse(args);
+        const product = await productService.create(input);
+        return {
+          content: [{
+            type: 'text',
+            text: JSON.stringify({
+              success: true,
+              message: 'Product created (inactive)',
+              product: {
+                id: product.id,
+                productNumber: product.productNumber,
+                name: product.name,
+                active: product.active,
+              },
+            }, null, 2),
+          }],
+        };
+      }
+
+      case 'product_get': {
+        const input = ProductGetInput.parse(args);
+        const product = await productService.get(input);
+        if (!product) {
+          return {
+            content: [{ type: 'text', text: JSON.stringify({ error: true, message: 'Product not found' }, null, 2) }],
+            isError: true,
+          };
+        }
+        return {
+          content: [{ type: 'text', text: JSON.stringify(product, null, 2) }],
+        };
+      }
+
+      case 'product_list': {
+        const input = ProductListInput.parse(args);
+        const result = await productService.list(input);
+        return {
+          content: [{ type: 'text', text: JSON.stringify(result, null, 2) }],
+        };
+      }
+
+      case 'product_set_active': {
+        const input = ProductSetActiveInput.parse(args);
+        await productService.setActive(input.id, input.active);
+        return {
+          content: [{
+            type: 'text',
+            text: JSON.stringify({
+              success: true,
+              message: `Product ${input.active ? 'activated' : 'deactivated'}`,
+              productId: input.id,
+              active: input.active,
+            }, null, 2),
+          }],
+        };
+      }
+
+      case 'product_update': {
+        const input = ProductUpdateInput.parse(args);
+        const { id, ...updateData } = input;
+        const product = await productService.update(id, updateData);
+        return {
+          content: [{
+            type: 'text',
+            text: JSON.stringify({
+              success: true,
+              message: 'Product updated',
+              product: {
+                id: product.id,
+                productNumber: product.productNumber,
+                name: product.name,
+              },
+            }, null, 2),
+          }],
+        };
+      }
+
+      case 'search_products': {
+        const input = SearchProductsInput.parse(args);
+        const products = await productService.search(input.query, input.limit ?? 20);
+        return {
+          content: [{
+            type: 'text',
+            text: JSON.stringify({
+              query: input.query,
+              count: products.length,
+              products: products.map(p => ({
+                id: p.id,
+                productNumber: p.productNumber,
+                name: p.name,
+                active: p.active,
+              })),
+            }, null, 2),
+          }],
+        };
+      }
+
+      // === CONTENT GENERATION TOOLS ===
+      case 'product_generate_content': {
+        const input = ProductGenerateContentInput.parse(args);
+        const prompt = await contentService.generateContentPrompt(input);
+        return {
+          content: [{ type: 'text', text: JSON.stringify(prompt, null, 2) }],
+        };
+      }
+
+      case 'product_generate_seo': {
+        const input = ProductGenerateSeoInput.parse(args);
+        const prompt = await contentService.generateSeoPrompt(input);
+        return {
+          content: [{ type: 'text', text: JSON.stringify(prompt, null, 2) }],
+        };
+      }
+
+      case 'variant_generate_content': {
+        const input = VariantGenerateContentInput.parse(args);
+        const prompt = await contentService.generateVariantPrompt(input);
+        return {
+          content: [{ type: 'text', text: JSON.stringify(prompt, null, 2) }],
+        };
+      }
+
+      case 'content_update': {
+        const input = ContentUpdateInput.parse(args);
+        const { productId, ...updateData } = input;
+        const product = await productService.update(productId, updateData);
+        return {
+          content: [{
+            type: 'text',
+            text: JSON.stringify({
+              success: true,
+              message: 'Content updated',
+              productId: product.id,
+              updated: Object.keys(updateData),
+            }, null, 2),
+          }],
+        };
+      }
+
+      // === CATEGORY TOOLS ===
+      case 'category_list': {
+        const input = CategoryListInput.parse(args);
+        const categories = await categoryService.list(input);
+        return {
+          content: [{ type: 'text', text: JSON.stringify({ categories }, null, 2) }],
+        };
+      }
+
+      case 'category_get': {
+        const input = CategoryGetInput.parse(args);
+        const category = await categoryService.get(input);
+        if (!category) {
+          return {
+            content: [{ type: 'text', text: JSON.stringify({ error: true, message: 'Category not found' }, null, 2) }],
+            isError: true,
+          };
+        }
+        return {
+          content: [{ type: 'text', text: JSON.stringify(category, null, 2) }],
+        };
+      }
+
+      case 'category_generate_content': {
+        const input = CategoryGenerateContentInput.parse(args);
+        const category = await categoryService.get({ id: input.id, includeProducts: false, productLimit: 0 });
+        if (!category) {
+          return {
+            content: [{ type: 'text', text: JSON.stringify({ error: true, message: 'Category not found' }, null, 2) }],
+            isError: true,
+          };
+        }
+        const breadcrumb = await categoryService.getBreadcrumb(input.id);
+        const style = input.style ?? contentService.detectStyleFromBreadcrumb(breadcrumb);
+        return {
+          content: [{
+            type: 'text',
+            text: JSON.stringify({
+              category: {
+                id: category.id,
+                name: category.name,
+                breadcrumb,
+              },
+              style,
+              maxLength: input.maxLength ?? 500,
+              instructions: style === 'software'
+                ? 'Generate professional SEO text. Use formal Sie-Form. Focus on benefits for shop owners/developers.'
+                : 'Generate engaging SEO text. Use informal Du-Form. Focus on creativity and emotion.',
+            }, null, 2),
+          }],
+        };
+      }
+
+      // === HELPER TOOLS ===
+      case 'get_properties': {
+        const input = GetPropertiesInput.parse(args);
+        const properties = await propertyService.list(input.groupId);
+        return {
+          content: [{ type: 'text', text: JSON.stringify({ properties }, null, 2) }],
+        };
+      }
+
+      case 'get_manufacturers': {
+        const input = GetManufacturersInput.parse(args);
+        const manufacturers = await manufacturerService.list(input.search, input.limit ?? 50);
+        return {
+          content: [{ type: 'text', text: JSON.stringify({ manufacturers }, null, 2) }],
+        };
+      }
+
+      case 'snippet_list': {
+        const input = SnippetListInput.parse(args);
+        const snippets = await snippetService.list(input.locale ?? 'de-DE', input.activeOnly ?? true);
+        return {
+          content: [{
+            type: 'text',
+            text: JSON.stringify({
+              locale: input.locale ?? 'de-DE',
+              count: snippets.length,
+              snippets: snippets.map(s => ({
+                identifier: s.identifier,
+                name: s.name,
+                active: s.active,
+                position: s.position,
+              })),
+            }, null, 2),
+          }],
+        };
+      }
+
+      default:
+        return {
+          content: [{ type: 'text', text: `Unknown tool: ${name}` }],
+          isError: true,
+        };
+    }
+  } catch (error) {
+    if (error instanceof MCPError) {
+      return {
+        content: [{ type: 'text', text: JSON.stringify(error.toResponse(), null, 2) }],
+        isError: true,
+      };
+    }
+
+    // Zod validation errors
+    if (error instanceof Error && error.name === 'ZodError') {
+      const zodError = error as unknown as { errors: Array<{ path: string[]; message: string }> };
+      return {
+        content: [{
+          type: 'text',
+          text: JSON.stringify({
+            error: true,
+            code: 'INVALID_INPUT',
+            message: 'Validation failed',
+            details: zodError.errors.map(e => ({
+              field: e.path.join('.'),
+              message: e.message,
+            })),
+          }, null, 2),
+        }],
+        isError: true,
+      };
+    }
+
+    logger.error('Tool execution error', { tool: name, error: String(error) });
+    return {
+      content: [{ type: 'text', text: `Error: ${error instanceof Error ? error.message : 'Unknown error'}` }],
+      isError: true,
+    };
+  }
+});
+
+// Start server
+async function main() {
+  logger.info('Starting claude-mcp-shopwareadmin server', {
+    version: '0.1.0',
+    shopwareUrl: config.shopware.url,
+  });
+
+  const transport = new StdioServerTransport();
+  await server.connect(transport);
+
+  logger.info('Server connected and ready');
+}
+
+main().catch((error) => {
+  logger.error('Failed to start server', { error: String(error) });
+  process.exit(1);
+});
