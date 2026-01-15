@@ -88,6 +88,7 @@ const PRODUCT_ASSOCIATIONS: Record<string, SearchCriteria | object> = {
  */
 interface ShopwareProduct {
   id: string;
+  versionId: string;
   productNumber: string;
   name: string;
   description: string | null;
@@ -299,6 +300,12 @@ export class ProductService {
         return null;
       }
 
+      // Debug: Log raw customFields from API
+      this.logger.info('Raw customFields from API', {
+        productNumber: rawProduct.productNumber,
+        customFields: JSON.stringify(rawProduct.customFields)
+      });
+
       const product = this.mapToProduct(rawProduct);
 
       // Cache the result
@@ -404,11 +411,28 @@ export class ProductService {
 
   /**
    * Update product data
+   *
+   * Uses the Sync API for updates that include customFields,
+   * as this requires versionId handling.
    */
   async update(id: string, data: Partial<Omit<ProductUpdateInput, 'id'>>): Promise<Product> {
     this.logger.info('Updating product', { id, fields: Object.keys(data) });
 
-    const payload: Record<string, unknown> = {};
+    // First, fetch the product to get its versionId (required for Sync API)
+    const criteria: SearchCriteria = {
+      limit: 1,
+      ids: [id],
+    };
+    const response = await this.api.search<ShopwareProduct>('product', criteria);
+    const existingProduct = response.data[0];
+    if (!existingProduct) {
+      throw MCPError.notFound('Product', id);
+    }
+
+    const payload: Record<string, unknown> = {
+      id,
+      versionId: existingProduct.versionId,
+    };
 
     if (data.name !== undefined) payload.name = data.name;
     if (data.description !== undefined) payload.description = data.description;
@@ -432,7 +456,16 @@ export class ProductService {
     }
 
     try {
-      await this.api.patch(`/api/product/${id}`, payload);
+      // Use Sync API for all updates (required for customFields to work properly)
+      const syncPayload = [{
+        key: 'write',
+        action: 'upsert',
+        entity: 'product',
+        payload: [payload],
+      }];
+
+      this.logger.info('Sync payload', { syncPayload: JSON.stringify(syncPayload) });
+      await this.api.post('/api/_action/sync', syncPayload);
       this.invalidateCache(id);
 
       // Fetch and return updated product

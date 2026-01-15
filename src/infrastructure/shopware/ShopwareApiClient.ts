@@ -74,7 +74,9 @@ export class ShopwareApiClient {
       },
     };
     if (body) {
-      fetchOptions.body = JSON.stringify(body);
+      const jsonBody = JSON.stringify(body);
+      this.logger.info('API Request Body', { method, endpoint, body: jsonBody });
+      fetchOptions.body = jsonBody;
     }
     const response = await fetch(url, fetchOptions);
 
