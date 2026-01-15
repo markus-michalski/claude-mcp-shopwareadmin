@@ -415,6 +415,7 @@ export class ProductService {
     if (data.ean !== undefined) payload.ean = data.ean;
     if (data.stock !== undefined) payload.stock = data.stock;
     if (data.manufacturerId !== undefined) payload.manufacturerId = data.manufacturerId;
+    if (data.customFields !== undefined) payload.customFields = data.customFields;
 
     // Handle price update
     if (data.price !== undefined) {
@@ -547,7 +548,10 @@ export class ProductService {
   /**
    * Map price array
    */
-  private mapPrices(prices: ShopwareProduct['price']): Price[] {
+  private mapPrices(prices: ShopwareProduct['price'] | null | undefined): Price[] {
+    if (!prices || !Array.isArray(prices)) {
+      return [];
+    }
     return prices.map((p) => ({
       currencyId: p.currencyId,
       gross: p.gross,

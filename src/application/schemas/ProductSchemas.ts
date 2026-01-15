@@ -159,6 +159,10 @@ export const ProductUpdateInput = z.object({
   manufacturerId: shopwareIdOptional('Invalid manufacturer ID format').describe(
     'New manufacturer ID'
   ),
+  customFields: z
+    .record(z.string(), z.unknown())
+    .optional()
+    .describe('Custom fields as key-value object (e.g., {"custom_stickdatei_stickmaß": "12,0 x 14,8 cm"})'),
 });
 export type ProductUpdateInput = z.infer<typeof ProductUpdateInput>;
 
