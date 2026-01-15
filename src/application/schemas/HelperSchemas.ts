@@ -36,15 +36,14 @@ export type GetManufacturersInput = z.infer<typeof GetManufacturersInput>;
 
 /**
  * snippet_list - List available product snippets
+ *
+ * Note: Language is determined by Shopware's API context (sw-language-id header).
+ * The mmd_product_snippet entity uses Shopware's standard translation system.
  */
 export const SnippetListInput = z.object({
   activeOnly: z
     .boolean()
     .default(true)
     .describe('Only return active snippets'),
-  locale: z
-    .enum(['de-DE', 'en-GB'])
-    .default('de-DE')
-    .describe('Language for translated content'),
 });
 export type SnippetListInput = z.infer<typeof SnippetListInput>;

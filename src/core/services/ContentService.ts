@@ -34,11 +34,6 @@ import type {
 import { MCPError, ErrorCode } from '../domain/Errors.js';
 
 /**
- * Default locale for snippets
- */
-const DEFAULT_LOCALE = 'de-DE';
-
-/**
  * Default SEO constraints
  */
 const DEFAULT_SEO_CONSTRAINTS = {
@@ -339,15 +334,14 @@ export class ContentService {
 
   /**
    * Fetch snippet info for available snippets
+   *
+   * Note: Translations are resolved by Shopware based on API language context.
    */
   private async fetchSnippetInfo(
     identifiers?: string[]
   ): Promise<SnippetInfo[]> {
     if (identifiers && identifiers.length > 0) {
-      const snippets = await this.snippetService.getMultiple(
-        identifiers,
-        DEFAULT_LOCALE
-      );
+      const snippets = await this.snippetService.getMultiple(identifiers);
       return snippets.map((s) => ({
         id: s.id,
         identifier: s.identifier,
@@ -356,7 +350,7 @@ export class ContentService {
     }
 
     // Get all active snippets
-    const allSnippets = await this.snippetService.list(DEFAULT_LOCALE, true);
+    const allSnippets = await this.snippetService.list(true);
     return allSnippets.map((s) => ({
       id: s.id,
       identifier: s.identifier,

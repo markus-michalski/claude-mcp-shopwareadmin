@@ -131,7 +131,11 @@ export interface SnippetInfo {
 }
 
 /**
- * Full snippet entity from mmd-product-snippet plugin
+ * Full snippet entity from mmd_product_snippet plugin
+ *
+ * Note: This plugin uses Shopware's standard translation system.
+ * The entity has no locale/position fields - translations are
+ * handled via mmd_product_snippet_translation association.
  */
 export interface Snippet {
   id: string;
@@ -139,8 +143,6 @@ export interface Snippet {
   name: string;
   content: string;
   active: boolean;
-  locale: string;
-  position: number;
   createdAt: string;
   updatedAt: string;
 }
@@ -153,7 +155,6 @@ export interface SnippetListItem {
   identifier: string;
   name: string;
   active: boolean;
-  locale: string;
 }
 
 /**

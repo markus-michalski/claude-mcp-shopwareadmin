@@ -5,6 +5,13 @@
  * - list: Get all snippets with optional filters
  * - getByIdentifier: Get snippet by unique identifier
  * - getMultiple: Get multiple snippets by identifiers
+ *
+ * NOTE: This plugin uses Shopware's standard translation system.
+ * The entity is mmd-product-snippet with translations in mmd-product-snippet_translation.
+ * Fields: id, identifier, active (base) + name, content (translated)
+ *
+ * Translations are automatically resolved by Shopware based on the
+ * current language context of the API request.
  */
 import type { Logger } from '../../infrastructure/logging/Logger.js';
 import type {
@@ -26,16 +33,17 @@ const SNIPPET_CACHE_TTL = 10 * 60 * 1000;
 const CACHE_PREFIX = 'snippet:';
 
 /**
- * Shopware raw snippet response structure
+ * Shopware raw snippet response structure from mmd-product-snippet entity
+ * Note: name and content are translated fields loaded via Shopware's translation system
  */
 interface ShopwareSnippet {
   id: string;
   identifier: string;
-  name: string;
-  content: string;
   active: boolean;
-  locale: string;
-  position?: number;
+  // Translated fields (loaded for current language context)
+  name: string | null;
+  content: string | null;
+  // Shopware timestamps
   createdAt: string;
   updatedAt: string;
 }
@@ -52,14 +60,16 @@ export class SnippetService {
   // ===========================================================================
 
   /**
-   * List all snippets for a given locale
+   * List all snippets
    *
-   * @param locale - Locale code (e.g., 'de-DE', 'en-GB')
+   * Translations are automatically resolved by Shopware based on
+   * the API's language context.
+   *
    * @param activeOnly - Only return active snippets (default: true)
-   * @returns Array of snippets sorted by position
+   * @returns Array of snippets sorted by identifier
    */
-  async list(locale: string, activeOnly = true): Promise<Snippet[]> {
-    const cacheKey = `${CACHE_PREFIX}list:${locale}:${activeOnly}`;
+  async list(activeOnly = true): Promise<Snippet[]> {
+    const cacheKey = `${CACHE_PREFIX}list:${activeOnly}`;
 
     // Check cache
     const cached = this.cache.get<Snippet[]>(cacheKey);
@@ -69,9 +79,7 @@ export class SnippetService {
     }
 
     // Build search criteria
-    const filters: SearchFilter[] = [
-      { type: 'equals', field: 'locale', value: locale },
-    ];
+    const filters: SearchFilter[] = [];
 
     if (activeOnly) {
       filters.push({ type: 'equals', field: 'active', value: true });
@@ -80,10 +88,10 @@ export class SnippetService {
     const criteria: SearchCriteria = {
       limit: 100,
       filter: filters,
-      sort: [{ field: 'position', order: 'ASC' }],
+      sort: [{ field: 'identifier', order: 'ASC' }],
     };
 
-    this.logger.debug('Fetching snippets', { locale, activeOnly });
+    this.logger.debug('Fetching snippets', { activeOnly });
 
     const response = await this.api.search<ShopwareSnippet>(
       'mmd-product-snippet',
@@ -91,9 +99,6 @@ export class SnippetService {
     );
 
     const snippets = response.data.map((s) => this.mapToSnippet(s));
-
-    // Sort by position (in case API didn't sort)
-    snippets.sort((a, b) => a.position - b.position);
 
     // Cache the result
     this.cache.set(cacheKey, snippets, SNIPPET_CACHE_TTL);
@@ -109,14 +114,10 @@ export class SnippetService {
    * Get a single snippet by its identifier
    *
    * @param identifier - Unique snippet identifier (e.g., 'requirements')
-   * @param locale - Locale code
    * @returns Snippet or null if not found
    */
-  async getByIdentifier(
-    identifier: string,
-    locale: string
-  ): Promise<Snippet | null> {
-    const cacheKey = `${CACHE_PREFIX}identifier:${identifier}:${locale}`;
+  async getByIdentifier(identifier: string): Promise<Snippet | null> {
+    const cacheKey = `${CACHE_PREFIX}identifier:${identifier}`;
 
     // Check cache
     const cached = this.cache.get<Snippet | null>(cacheKey);
@@ -130,12 +131,11 @@ export class SnippetService {
       limit: 1,
       filter: [
         { type: 'equals', field: 'identifier', value: identifier },
-        { type: 'equals', field: 'locale', value: locale },
         { type: 'equals', field: 'active', value: true },
       ],
     };
 
-    this.logger.debug('Fetching snippet by identifier', { identifier, locale });
+    this.logger.debug('Fetching snippet by identifier', { identifier });
 
     const response = await this.api.search<ShopwareSnippet>(
       'mmd-product-snippet',
@@ -165,19 +165,15 @@ export class SnippetService {
    * Get multiple snippets by their identifiers
    *
    * @param identifiers - Array of snippet identifiers
-   * @param locale - Locale code
    * @returns Array of found snippets in requested order
    */
-  async getMultiple(
-    identifiers: string[],
-    locale: string
-  ): Promise<Snippet[]> {
+  async getMultiple(identifiers: string[]): Promise<Snippet[]> {
     if (identifiers.length === 0) {
       return [];
     }
 
-    // Fetch all snippets for the locale and filter
-    const allSnippets = await this.list(locale, true);
+    // Fetch all snippets and filter
+    const allSnippets = await this.list(true);
 
     // Filter and maintain order
     const snippetMap = new Map(allSnippets.map((s) => [s.identifier, s]));
@@ -204,11 +200,9 @@ export class SnippetService {
     return {
       id: raw.id,
       identifier: raw.identifier,
-      name: raw.name,
-      content: raw.content,
+      name: raw.name ?? '',
+      content: raw.content ?? '',
       active: raw.active,
-      locale: raw.locale,
-      position: raw.position ?? 0,
       createdAt: raw.createdAt,
       updatedAt: raw.updatedAt,
     };

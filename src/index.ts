@@ -319,12 +319,11 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
     },
     {
       name: 'snippet_list',
-      description: 'List available product snippets for software descriptions',
+      description: 'List available product snippets for software descriptions. Language is determined by Shopware API context.',
       inputSchema: {
         type: 'object',
         properties: {
           activeOnly: { type: 'boolean', default: true, description: 'Only active snippets' },
-          locale: { type: 'string', enum: ['de-DE', 'en-GB'], default: 'de-DE', description: 'Language' },
         },
       },
     },
@@ -571,18 +570,16 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 
       case 'snippet_list': {
         const input = SnippetListInput.parse(args);
-        const snippets = await snippetService.list(input.locale ?? 'de-DE', input.activeOnly ?? true);
+        const snippets = await snippetService.list(input.activeOnly ?? true);
         return {
           content: [{
             type: 'text',
             text: JSON.stringify({
-              locale: input.locale ?? 'de-DE',
               count: snippets.length,
               snippets: snippets.map(s => ({
                 identifier: s.identifier,
                 name: s.name,
                 active: s.active,
-                position: s.position,
               })),
             }, null, 2),
           }],
