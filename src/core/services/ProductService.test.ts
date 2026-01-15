@@ -20,6 +20,7 @@ import {
   MOCK_CATEGORY_ID,
   MOCK_TAX_19_ID,
   MOCK_EUR_CURRENCY_ID,
+  MOCK_SALES_CHANNEL_ID,
   MOCK_CREATE_INPUT,
   MOCK_UPDATE_INPUT,
   createMockLogger,
@@ -50,6 +51,7 @@ describe('ProductService', () => {
       defaultTaxId: MOCK_TAX_19_ID,
       defaultTaxRate: 19,
       defaultCurrencyId: MOCK_EUR_CURRENCY_ID,
+      defaultSalesChannelId: MOCK_SALES_CHANNEL_ID,
     });
   });
 

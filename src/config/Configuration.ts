@@ -17,6 +17,7 @@ export interface ShopwareConfig {
   defaultTaxId: string;
   defaultTaxRate: number;
   defaultCurrencyId: string;
+  defaultSalesChannelId: string;
 }
 
 /**
@@ -134,6 +135,7 @@ export function loadConfig(): Config {
       defaultTaxId: required('SHOPWARE_DEFAULT_TAX_ID'),
       defaultTaxRate: parseIntEnv('SHOPWARE_DEFAULT_TAX_RATE', 0),
       defaultCurrencyId: optional('SHOPWARE_DEFAULT_CURRENCY_ID', 'b7d2554b0ce847cd82f3ac9bd1c0dfca'),
+      defaultSalesChannelId: required('SHOPWARE_DEFAULT_SALES_CHANNEL_ID'),
     },
     wikijs: {
       baseUrl: optional('WIKIJS_BASE_URL', 'https://faq.markus-michalski.net'),

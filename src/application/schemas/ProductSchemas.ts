@@ -48,6 +48,17 @@ export const ProductCreateInput = z.object({
     .nonnegative('Stock cannot be negative')
     .default(0)
     .describe('Initial stock quantity'),
+  salesChannelId: shopwareIdOptional('Invalid sales channel ID format').describe(
+    'Sales channel ID (uses default from config if not provided)'
+  ),
+  tags: z
+    .array(z.string().min(1).max(255))
+    .optional()
+    .describe('Array of tag names (will be created if not existing)'),
+  searchKeywords: z
+    .array(z.string().min(1).max(255))
+    .optional()
+    .describe('Custom search keywords for better findability'),
 });
 export type ProductCreateInput = z.infer<typeof ProductCreateInput>;
 

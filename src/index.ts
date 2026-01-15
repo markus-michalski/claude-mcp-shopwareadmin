@@ -69,6 +69,7 @@ const productService = new ProductService(shopwareApi, cache, logger, {
   defaultTaxId: config.shopware.defaultTaxId,
   defaultTaxRate: config.shopware.defaultTaxRate,
   defaultCurrencyId: config.shopware.defaultCurrencyId,
+  defaultSalesChannelId: config.shopware.defaultSalesChannelId,
 });
 const categoryService = new CategoryService(shopwareApi, cache, logger);
 const snippetService = new SnippetService(shopwareApi, cache, logger);
@@ -112,8 +113,11 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
           description: { type: 'string', maxLength: 65535, description: 'Product description (HTML)' },
           ean: { type: 'string', maxLength: 50, description: 'EAN/GTIN barcode' },
           manufacturerId: { type: 'string', pattern: '^[0-9a-f]{32}$', description: 'Manufacturer ID (32-char hex)' },
-          taxId: { type: 'string', pattern: '^[0-9a-f]{32}$', description: 'Tax rate ID (32-char hex, defaults to 19%)' },
+          taxId: { type: 'string', pattern: '^[0-9a-f]{32}$', description: 'Tax rate ID (32-char hex, defaults to configured rate)' },
           stock: { type: 'integer', minimum: 0, default: 0, description: 'Initial stock' },
+          salesChannelId: { type: 'string', pattern: '^[0-9a-f]{32}$', description: 'Sales channel ID (uses default from config if not provided)' },
+          tags: { type: 'array', items: { type: 'string' }, description: 'Array of tag names (created if not existing)' },
+          searchKeywords: { type: 'array', items: { type: 'string' }, description: 'Custom search keywords for better findability' },
         },
         required: ['name', 'productNumber', 'price', 'categoryId'],
       },

@@ -40,6 +40,8 @@ export const MOCK_CURRENCIES = {
 export const MOCK_TAX_19_ID = '1950c5d2b90c4c5b9c1cf1a9e8e8e8e8';
 export const MOCK_TAX_7_ID = '7000c5d2b90c4c5b9c1cf1a9e8e8e8e8';
 
+export const MOCK_SALES_CHANNEL_ID = 'sc00c5d2b90c4c5b9c1cf1a9e8e8e8e8';
+
 export const MOCK_TAX_RATES = {
   data: [
     {

@@ -48,6 +48,7 @@ export interface ProductServiceConfig {
   defaultTaxId: string;
   defaultTaxRate: number;
   defaultCurrencyId: string;
+  defaultSalesChannelId: string;
 }
 
 /**
@@ -178,7 +179,9 @@ export class ProductService {
     const taxRate = this.getTaxRateForId(taxId);
     const netPrice = input.price / (1 + taxRate / 100);
 
-    const payload = {
+    const salesChannelId = input.salesChannelId ?? this.config.defaultSalesChannelId;
+
+    const payload: Record<string, unknown> = {
       name: input.name,
       productNumber: input.productNumber,
       active: false, // ALWAYS inactive on creation!
@@ -196,7 +199,24 @@ export class ProductService {
         },
       ],
       categories: [{ id: input.categoryId }],
+      // Sales channel visibility (product appears in this sales channel)
+      visibilities: [
+        {
+          salesChannelId,
+          visibility: 30, // 30 = visible everywhere (search, listing, detail)
+        },
+      ],
     };
+
+    // Add custom search keywords if provided
+    if (input.searchKeywords && input.searchKeywords.length > 0) {
+      payload.customSearchKeywords = input.searchKeywords;
+    }
+
+    // Add tags if provided (Shopware creates them if they don't exist)
+    if (input.tags && input.tags.length > 0) {
+      payload.tags = input.tags.map((name) => ({ name }));
+    }
 
     try {
       // Shopware POST returns empty body (204) on success
