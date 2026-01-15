@@ -65,7 +65,11 @@ const shopwareApi = new ShopwareApiClient(config.shopware.url, authenticator, lo
 const wikiService = new WikiJsService(config.wikijs.baseUrl, cache, logger);
 
 // Initialize business services
-const productService = new ProductService(shopwareApi, cache, logger);
+const productService = new ProductService(shopwareApi, cache, logger, {
+  defaultTaxId: config.shopware.defaultTaxId,
+  defaultTaxRate: config.shopware.defaultTaxRate,
+  defaultCurrencyId: config.shopware.defaultCurrencyId,
+});
 const categoryService = new CategoryService(shopwareApi, cache, logger);
 const snippetService = new SnippetService(shopwareApi, cache, logger);
 const manufacturerService = new ManufacturerService(shopwareApi, cache, logger);

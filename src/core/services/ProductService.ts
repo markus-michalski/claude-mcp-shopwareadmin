@@ -42,16 +42,13 @@ const PRODUCT_CACHE_TTL = 5 * 60 * 1000;
 const CACHE_PREFIX = 'product:';
 
 /**
- * Default 19% tax rate ID (German standard rate)
- * This should be fetched from config or API in production
+ * Product configuration from environment
  */
-const DEFAULT_TAX_ID = '1950c5d2b90c4c5b9c1cf1a9e8e8e8e8';
-
-/**
- * Default EUR currency ID
- * This should be fetched from config or API in production
- */
-const DEFAULT_CURRENCY_ID = 'b7d2554b0ce847cd82f3ac9bd1c0dfca';
+export interface ProductServiceConfig {
+  defaultTaxId: string;
+  defaultTaxRate: number;
+  defaultCurrencyId: string;
+}
 
 /**
  * Standard associations to load with products
@@ -160,7 +157,8 @@ export class ProductService {
   constructor(
     private readonly api: ShopwareApiClient,
     private readonly cache: InMemoryCache,
-    private readonly logger: Logger
+    private readonly logger: Logger,
+    private readonly config: ProductServiceConfig
   ) {}
 
   // ===========================================================================
@@ -176,7 +174,7 @@ export class ProductService {
   async create(input: ProductCreateInput): Promise<Product> {
     this.logger.info('Creating new product', { productNumber: input.productNumber });
 
-    const taxId = input.taxId ?? DEFAULT_TAX_ID;
+    const taxId = input.taxId ?? this.config.defaultTaxId;
     const taxRate = this.getTaxRateForId(taxId);
     const netPrice = input.price / (1 + taxRate / 100);
 
@@ -191,7 +189,7 @@ export class ProductService {
       taxId,
       price: [
         {
-          currencyId: DEFAULT_CURRENCY_ID,
+          currencyId: this.config.defaultCurrencyId,
           gross: input.price,
           net: Math.round(netPrice * 100) / 100,
           linked: true,
@@ -201,8 +199,20 @@ export class ProductService {
     };
 
     try {
-      const response = await this.api.post<{ data: ShopwareProduct }>('/api/product', payload);
-      const product = this.mapToProduct(response.data);
+      // Shopware POST returns empty body (204) on success
+      // We need to fetch the created product by productNumber afterwards
+      await this.api.post<void>('/api/product', payload);
+
+      // Fetch the created product to return complete data
+      const product = await this.get({ productNumber: input.productNumber });
+      if (!product) {
+        throw new MCPError(
+          'Product was created but could not be retrieved',
+          ErrorCode.API_ERROR,
+          false,
+          'Check Shopware Admin for the created product'
+        );
+      }
 
       this.logger.info('Product created', { id: product.id, productNumber: product.productNumber });
 
@@ -388,11 +398,11 @@ export class ProductService {
 
     // Handle price update
     if (data.price !== undefined) {
-      const taxRate = 19; // TODO: Get from product's current tax rate
+      const taxRate = this.config.defaultTaxRate;
       const netPrice = data.price / (1 + taxRate / 100);
       payload.price = [
         {
-          currencyId: DEFAULT_CURRENCY_ID,
+          currencyId: this.config.defaultCurrencyId,
           gross: data.price,
           net: Math.round(netPrice * 100) / 100,
           linked: true,
@@ -447,15 +457,17 @@ export class ProductService {
   /**
    * Get tax rate for a tax ID
    *
-   * Currently returns hardcoded values, should fetch from API in production
+   * Returns configured default tax rate for known default tax ID,
+   * otherwise falls back to configured default rate.
    */
   private getTaxRateForId(taxId: string): number {
-    // Hardcoded for now - should be fetched from /api/tax
-    const taxRates: Record<string, number> = {
-      '1950c5d2b90c4c5b9c1cf1a9e8e8e8e8': 19, // Standard
-      '7000c5d2b90c4c5b9c1cf1a9e8e8e8e8': 7, // Reduced
-    };
-    return taxRates[taxId] ?? 19;
+    // Use configured default tax rate when using the default tax ID
+    if (taxId === this.config.defaultTaxId) {
+      return this.config.defaultTaxRate;
+    }
+    // For other tax IDs, fall back to configured default rate
+    // In a full implementation, this would fetch from /api/tax
+    return this.config.defaultTaxRate;
   }
 
   /**

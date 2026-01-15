@@ -46,7 +46,11 @@ describe('ProductService', () => {
     );
     client = new ShopwareApiClient(BASE_URL, authenticator, logger);
     cache = new InMemoryCache(logger);
-    service = new ProductService(client, cache, logger);
+    service = new ProductService(client, cache, logger, {
+      defaultTaxId: MOCK_TAX_19_ID,
+      defaultTaxRate: 19,
+      defaultCurrencyId: MOCK_EUR_CURRENCY_ID,
+    });
   });
 
   // ===========================================================================
