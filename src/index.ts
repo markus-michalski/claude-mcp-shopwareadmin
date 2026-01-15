@@ -34,6 +34,7 @@ import {
   CategoryListInput,
   CategoryGetInput,
   CategoryGenerateContentInput,
+  CategoryUpdateInput,
   ProductGenerateContentInput,
   ProductGenerateSeoInput,
   VariantGenerateContentInput,
@@ -103,11 +104,11 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
           name: { type: 'string', minLength: 1, maxLength: 255, description: 'Product name' },
           productNumber: { type: 'string', minLength: 1, maxLength: 64, description: 'Unique product number/SKU' },
           price: { type: 'number', exclusiveMinimum: 0, description: 'Gross price in EUR' },
-          categoryId: { type: 'string', format: 'uuid', description: 'Category ID' },
+          categoryId: { type: 'string', pattern: '^[0-9a-f]{32}$', description: 'Category ID (32-char hex)' },
           description: { type: 'string', maxLength: 65535, description: 'Product description (HTML)' },
           ean: { type: 'string', maxLength: 50, description: 'EAN/GTIN barcode' },
-          manufacturerId: { type: 'string', format: 'uuid', description: 'Manufacturer ID' },
-          taxId: { type: 'string', format: 'uuid', description: 'Tax rate ID (defaults to 19%)' },
+          manufacturerId: { type: 'string', pattern: '^[0-9a-f]{32}$', description: 'Manufacturer ID (32-char hex)' },
+          taxId: { type: 'string', pattern: '^[0-9a-f]{32}$', description: 'Tax rate ID (32-char hex, defaults to 19%)' },
           stock: { type: 'integer', minimum: 0, default: 0, description: 'Initial stock' },
         },
         required: ['name', 'productNumber', 'price', 'categoryId'],
@@ -119,7 +120,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
       inputSchema: {
         type: 'object',
         properties: {
-          id: { type: 'string', format: 'uuid', description: 'Product ID (UUID)' },
+          id: { type: 'string', pattern: '^[0-9a-f]{32}$', description: 'Product ID (32-char hex)' },
           productNumber: { type: 'string', description: 'Product number/SKU' },
         },
       },
@@ -130,7 +131,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
       inputSchema: {
         type: 'object',
         properties: {
-          categoryId: { type: 'string', format: 'uuid', description: 'Filter by category' },
+          categoryId: { type: 'string', pattern: '^[0-9a-f]{32}$', description: 'Filter by category (32-char hex)' },
           active: { type: 'boolean', description: 'Filter by active status' },
           search: { type: 'string', maxLength: 255, description: 'Search in name/number' },
           limit: { type: 'integer', minimum: 1, maximum: 100, default: 25, description: 'Max results' },
@@ -144,7 +145,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
       inputSchema: {
         type: 'object',
         properties: {
-          id: { type: 'string', format: 'uuid', description: 'Product ID' },
+          id: { type: 'string', pattern: '^[0-9a-f]{32}$', description: 'Product ID (32-char hex)' },
           active: { type: 'boolean', description: 'New active status' },
         },
         required: ['id', 'active'],
@@ -156,13 +157,13 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
       inputSchema: {
         type: 'object',
         properties: {
-          id: { type: 'string', format: 'uuid', description: 'Product ID' },
+          id: { type: 'string', pattern: '^[0-9a-f]{32}$', description: 'Product ID (32-char hex)' },
           name: { type: 'string', minLength: 1, maxLength: 255, description: 'New name' },
           price: { type: 'number', exclusiveMinimum: 0, description: 'New price' },
           description: { type: 'string', maxLength: 65535, description: 'New description' },
           ean: { type: 'string', maxLength: 50, description: 'New EAN' },
           stock: { type: 'integer', minimum: 0, description: 'New stock' },
-          manufacturerId: { type: 'string', format: 'uuid', description: 'New manufacturer' },
+          manufacturerId: { type: 'string', pattern: '^[0-9a-f]{32}$', description: 'New manufacturer (32-char hex)' },
         },
         required: ['id'],
       },
@@ -187,7 +188,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
       inputSchema: {
         type: 'object',
         properties: {
-          productId: { type: 'string', format: 'uuid', description: 'Product ID' },
+          productId: { type: 'string', pattern: '^[0-9a-f]{32}$', description: 'Product ID (32-char hex)' },
           style: { type: 'string', enum: ['creative', 'software'], description: 'Force specific style' },
           maxLength: { type: 'integer', minimum: 200, maximum: 5000, default: 1000, description: 'Max chars' },
           includeSnippets: { type: 'boolean', default: true, description: 'Include snippets (software only)' },
@@ -202,7 +203,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
       inputSchema: {
         type: 'object',
         properties: {
-          productId: { type: 'string', format: 'uuid', description: 'Product ID' },
+          productId: { type: 'string', pattern: '^[0-9a-f]{32}$', description: 'Product ID (32-char hex)' },
           style: { type: 'string', enum: ['creative', 'software'], description: 'Force specific style' },
           maxTitleLength: { type: 'integer', minimum: 30, maximum: 70, default: 60, description: 'Max title length' },
           maxDescriptionLength: { type: 'integer', minimum: 100, maximum: 160, default: 155, description: 'Max description length' },
@@ -216,7 +217,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
       inputSchema: {
         type: 'object',
         properties: {
-          variantId: { type: 'string', format: 'uuid', description: 'Variant product ID' },
+          variantId: { type: 'string', pattern: '^[0-9a-f]{32}$', description: 'Variant product ID (32-char hex)' },
           inheritFromParent: { type: 'boolean', default: true, description: 'Inherit parent context' },
           focusOnOptions: { type: 'boolean', default: true, description: 'Emphasize variant options' },
         },
@@ -229,7 +230,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
       inputSchema: {
         type: 'object',
         properties: {
-          productId: { type: 'string', format: 'uuid', description: 'Product ID' },
+          productId: { type: 'string', pattern: '^[0-9a-f]{32}$', description: 'Product ID (32-char hex)' },
           description: { type: 'string', maxLength: 65535, description: 'New description (HTML)' },
           metaTitle: { type: 'string', maxLength: 255, description: 'SEO title' },
           metaDescription: { type: 'string', maxLength: 255, description: 'SEO description' },
@@ -246,7 +247,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
       inputSchema: {
         type: 'object',
         properties: {
-          parentId: { type: 'string', format: 'uuid', description: 'Only children of this category' },
+          parentId: { type: 'string', pattern: '^[0-9a-f]{32}$', description: 'Only children of this category (32-char hex)' },
           depth: { type: 'integer', minimum: 1, maximum: 10, default: 3, description: 'Tree depth' },
           includeInactive: { type: 'boolean', default: false, description: 'Include inactive categories' },
         },
@@ -258,7 +259,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
       inputSchema: {
         type: 'object',
         properties: {
-          id: { type: 'string', format: 'uuid', description: 'Category ID' },
+          id: { type: 'string', pattern: '^[0-9a-f]{32}$', description: 'Category ID (32-char hex)' },
           includeProducts: { type: 'boolean', default: false, description: 'Include products' },
           productLimit: { type: 'integer', minimum: 1, maximum: 100, default: 25, description: 'Max products' },
         },
@@ -271,9 +272,24 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
       inputSchema: {
         type: 'object',
         properties: {
-          id: { type: 'string', format: 'uuid', description: 'Category ID' },
+          id: { type: 'string', pattern: '^[0-9a-f]{32}$', description: 'Category ID (32-char hex)' },
           style: { type: 'string', enum: ['creative', 'software'], description: 'Force specific style' },
           maxLength: { type: 'integer', minimum: 100, maximum: 2000, default: 500, description: 'Max chars' },
+        },
+        required: ['id'],
+      },
+    },
+    {
+      name: 'category_update',
+      description: 'Update category SEO data (meta title, description, keywords) and description',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          id: { type: 'string', pattern: '^[0-9a-f]{32}$', description: 'Category ID (32-char hex)' },
+          description: { type: 'string', maxLength: 65535, description: 'Category description (HTML)' },
+          metaTitle: { type: 'string', maxLength: 255, description: 'SEO title' },
+          metaDescription: { type: 'string', maxLength: 255, description: 'SEO description' },
+          keywords: { type: 'string', maxLength: 255, description: 'SEO keywords (comma-separated)' },
         },
         required: ['id'],
       },
@@ -286,7 +302,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
       inputSchema: {
         type: 'object',
         properties: {
-          groupId: { type: 'string', format: 'uuid', description: 'Filter by property group' },
+          groupId: { type: 'string', pattern: '^[0-9a-f]{32}$', description: 'Filter by property group (32-char hex)' },
         },
       },
     },
@@ -510,6 +526,27 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
               instructions: style === 'software'
                 ? 'Generate professional SEO text. Use formal Sie-Form. Focus on benefits for shop owners/developers.'
                 : 'Generate engaging SEO text. Use informal Du-Form. Focus on creativity and emotion.',
+            }, null, 2),
+          }],
+        };
+      }
+
+      case 'category_update': {
+        const input = CategoryUpdateInput.parse(args);
+        const { id, ...updateData } = input;
+        const category = await categoryService.update(id, updateData);
+        return {
+          content: [{
+            type: 'text',
+            text: JSON.stringify({
+              success: true,
+              message: 'Category updated',
+              category: {
+                id: category.id,
+                name: category.name,
+                seoData: category.seoData,
+              },
+              updated: Object.keys(updateData),
             }, null, 2),
           }],
         };

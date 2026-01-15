@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { shopwareIdOptional } from './validators.js';
 
 // =============================================================================
 // Helper Tool Input Schemas
@@ -8,11 +9,9 @@ import { z } from 'zod';
  * get_properties - Get available property groups and values
  */
 export const GetPropertiesInput = z.object({
-  groupId: z
-    .string()
-    .uuid('Invalid group ID format')
-    .optional()
-    .describe('Filter by specific property group'),
+  groupId: shopwareIdOptional('Invalid group ID format').describe(
+    'Filter by specific property group'
+  ),
 });
 export type GetPropertiesInput = z.infer<typeof GetPropertiesInput>;
 

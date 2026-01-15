@@ -17,6 +17,7 @@ export {
   CategoryListInput,
   CategoryGetInput,
   CategoryGenerateContentInput,
+  CategoryUpdateInput,
 } from './schemas/CategorySchemas.js';
 
 // Content schemas

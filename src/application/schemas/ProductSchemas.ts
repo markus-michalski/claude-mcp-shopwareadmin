@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { shopwareId, shopwareIdOptional } from './validators.js';
 
 // =============================================================================
 // Product Tool Input Schemas
@@ -22,10 +23,9 @@ export const ProductCreateInput = z.object({
     .number()
     .positive('Price must be positive')
     .describe('Gross price in EUR'),
-  categoryId: z
-    .string()
-    .uuid('Invalid category ID format')
-    .describe('Category ID to assign the product to'),
+  categoryId: shopwareId('Invalid category ID format').describe(
+    'Category ID to assign the product to'
+  ),
   description: z
     .string()
     .max(65535, 'Description too long')
@@ -36,16 +36,12 @@ export const ProductCreateInput = z.object({
     .max(50, 'EAN too long')
     .optional()
     .describe('EAN/GTIN barcode'),
-  manufacturerId: z
-    .string()
-    .uuid('Invalid manufacturer ID format')
-    .optional()
-    .describe('Manufacturer/brand ID'),
-  taxId: z
-    .string()
-    .uuid('Invalid tax ID format')
-    .optional()
-    .describe('Tax rate ID (defaults to 19% standard rate)'),
+  manufacturerId: shopwareIdOptional('Invalid manufacturer ID format').describe(
+    'Manufacturer/brand ID'
+  ),
+  taxId: shopwareIdOptional('Invalid tax ID format').describe(
+    'Tax rate ID (defaults to 19% standard rate)'
+  ),
   stock: z
     .number()
     .int('Stock must be integer')
@@ -60,11 +56,7 @@ export type ProductCreateInput = z.infer<typeof ProductCreateInput>;
  */
 export const ProductGetInput = z
   .object({
-    id: z
-      .string()
-      .uuid('Invalid product ID format')
-      .optional()
-      .describe('Product ID (UUID)'),
+    id: shopwareIdOptional('Invalid product ID format').describe('Product ID'),
     productNumber: z
       .string()
       .min(1)
@@ -82,11 +74,9 @@ export type ProductGetInput = z.infer<typeof ProductGetInput>;
  * product_list - List products with filters
  */
 export const ProductListInput = z.object({
-  categoryId: z
-    .string()
-    .uuid('Invalid category ID format')
-    .optional()
-    .describe('Filter by category'),
+  categoryId: shopwareIdOptional('Invalid category ID format').describe(
+    'Filter by category'
+  ),
   active: z
     .boolean()
     .optional()
@@ -116,10 +106,7 @@ export type ProductListInput = z.infer<typeof ProductListInput>;
  * product_set_active - Activate or deactivate a product
  */
 export const ProductSetActiveInput = z.object({
-  id: z
-    .string()
-    .uuid('Invalid product ID format')
-    .describe('Product ID to update'),
+  id: shopwareId('Invalid product ID format').describe('Product ID to update'),
   active: z
     .boolean()
     .describe('New active status'),
@@ -130,10 +117,7 @@ export type ProductSetActiveInput = z.infer<typeof ProductSetActiveInput>;
  * product_update - Update product data
  */
 export const ProductUpdateInput = z.object({
-  id: z
-    .string()
-    .uuid('Invalid product ID format')
-    .describe('Product ID to update'),
+  id: shopwareId('Invalid product ID format').describe('Product ID to update'),
   name: z
     .string()
     .min(1)
@@ -161,11 +145,9 @@ export const ProductUpdateInput = z.object({
     .nonnegative()
     .optional()
     .describe('New stock quantity'),
-  manufacturerId: z
-    .string()
-    .uuid('Invalid manufacturer ID format')
-    .optional()
-    .describe('New manufacturer ID'),
+  manufacturerId: shopwareIdOptional('Invalid manufacturer ID format').describe(
+    'New manufacturer ID'
+  ),
 });
 export type ProductUpdateInput = z.infer<typeof ProductUpdateInput>;
 

@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { shopwareId } from './validators.js';
 
 // =============================================================================
 // Content Generation Tool Input Schemas
@@ -8,10 +9,9 @@ import { z } from 'zod';
  * product_generate_content - Generate product description
  */
 export const ProductGenerateContentInput = z.object({
-  productId: z
-    .string()
-    .uuid('Invalid product ID format')
-    .describe('Product ID to generate content for'),
+  productId: shopwareId('Invalid product ID format').describe(
+    'Product ID to generate content for'
+  ),
   style: z
     .enum(['creative', 'software'])
     .optional()
@@ -38,10 +38,7 @@ export type ProductGenerateContentInput = z.infer<typeof ProductGenerateContentI
  * product_generate_seo - Generate SEO metadata
  */
 export const ProductGenerateSeoInput = z.object({
-  productId: z
-    .string()
-    .uuid('Invalid product ID format')
-    .describe('Product ID'),
+  productId: shopwareId('Invalid product ID format').describe('Product ID'),
   style: z
     .enum(['creative', 'software'])
     .optional()
@@ -67,10 +64,7 @@ export type ProductGenerateSeoInput = z.infer<typeof ProductGenerateSeoInput>;
  * variant_generate_content - Generate variant-specific description
  */
 export const VariantGenerateContentInput = z.object({
-  variantId: z
-    .string()
-    .uuid('Invalid variant ID format')
-    .describe('Variant product ID'),
+  variantId: shopwareId('Invalid variant ID format').describe('Variant product ID'),
   inheritFromParent: z
     .boolean()
     .default(true)
@@ -86,10 +80,7 @@ export type VariantGenerateContentInput = z.infer<typeof VariantGenerateContentI
  * content_update - Save generated content to product
  */
 export const ContentUpdateInput = z.object({
-  productId: z
-    .string()
-    .uuid('Invalid product ID format')
-    .describe('Product ID to update'),
+  productId: shopwareId('Invalid product ID format').describe('Product ID to update'),
   description: z
     .string()
     .max(65535, 'Description too long')

@@ -245,6 +245,70 @@ export class CategoryService {
   }
 
   // ===========================================================================
+  // update() - Update category data (SEO, description)
+  // ===========================================================================
+
+  /**
+   * Update category data
+   *
+   * Supports updating:
+   * - description: Category description (HTML)
+   * - metaTitle: SEO title
+   * - metaDescription: SEO description
+   * - keywords: SEO keywords
+   *
+   * Invalidates cache after update.
+   */
+  async update(
+    id: string,
+    data: {
+      description?: string | undefined;
+      metaTitle?: string | undefined;
+      metaDescription?: string | undefined;
+      keywords?: string | undefined;
+    }
+  ): Promise<Category> {
+    this.logger.debug('Updating category', { id, fields: Object.keys(data) });
+
+    // Build update payload
+    const payload: Record<string, unknown> = {};
+
+    if (data.description !== undefined) {
+      payload.description = data.description;
+    }
+    if (data.metaTitle !== undefined) {
+      payload.metaTitle = data.metaTitle;
+    }
+    if (data.metaDescription !== undefined) {
+      payload.metaDescription = data.metaDescription;
+    }
+    if (data.keywords !== undefined) {
+      payload.keywords = data.keywords;
+    }
+
+    // Update via API
+    await this.api.patch(`/api/category/${id}`, payload);
+
+    // Invalidate cache
+    this.cache.delete(`${CACHE_PREFIX}id:${id}`);
+    // Also invalidate list caches (they might contain outdated data)
+    this.cache.clear();
+
+    // Fetch and return updated category
+    const updated = await this.get({
+      id,
+      includeProducts: false,
+      productLimit: 0,
+    });
+
+    if (!updated) {
+      throw new Error(`Category ${id} not found after update`);
+    }
+
+    return updated;
+  }
+
+  // ===========================================================================
   // Private helpers
   // ===========================================================================
 

@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { shopwareId, shopwareIdOptional } from './validators.js';
 
 // =============================================================================
 // Category Tool Input Schemas
@@ -8,11 +9,9 @@ import { z } from 'zod';
  * category_list - Get category tree
  */
 export const CategoryListInput = z.object({
-  parentId: z
-    .string()
-    .uuid('Invalid parent ID format')
-    .optional()
-    .describe('Only show children of this category'),
+  parentId: shopwareIdOptional('Invalid parent ID format').describe(
+    'Only show children of this category'
+  ),
   depth: z
     .number()
     .int()
@@ -31,10 +30,7 @@ export type CategoryListInput = z.infer<typeof CategoryListInput>;
  * category_get - Get single category details
  */
 export const CategoryGetInput = z.object({
-  id: z
-    .string()
-    .uuid('Invalid category ID format')
-    .describe('Category ID'),
+  id: shopwareId('Invalid category ID format').describe('Category ID'),
   includeProducts: z
     .boolean()
     .default(false)
@@ -53,10 +49,7 @@ export type CategoryGetInput = z.infer<typeof CategoryGetInput>;
  * category_generate_content - Generate SEO text for category
  */
 export const CategoryGenerateContentInput = z.object({
-  id: z
-    .string()
-    .uuid('Invalid category ID format')
-    .describe('Category ID'),
+  id: shopwareId('Invalid category ID format').describe('Category ID'),
   style: z
     .enum(['creative', 'software'])
     .optional()
@@ -70,3 +63,31 @@ export const CategoryGenerateContentInput = z.object({
     .describe('Maximum text length in characters'),
 });
 export type CategoryGenerateContentInput = z.infer<typeof CategoryGenerateContentInput>;
+
+/**
+ * category_update - Update category SEO data and description
+ */
+export const CategoryUpdateInput = z.object({
+  id: shopwareId('Invalid category ID format').describe('Category ID to update'),
+  description: z
+    .string()
+    .max(65535, 'Description too long')
+    .optional()
+    .describe('Category description (HTML)'),
+  metaTitle: z
+    .string()
+    .max(255, 'Meta title too long')
+    .optional()
+    .describe('SEO title'),
+  metaDescription: z
+    .string()
+    .max(255, 'Meta description too long')
+    .optional()
+    .describe('SEO description'),
+  keywords: z
+    .string()
+    .max(255, 'Keywords too long')
+    .optional()
+    .describe('SEO keywords (comma-separated)'),
+});
+export type CategoryUpdateInput = z.infer<typeof CategoryUpdateInput>;
