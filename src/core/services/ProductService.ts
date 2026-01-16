@@ -444,6 +444,9 @@ export class ProductService {
     if (data.metaTitle !== undefined) payload.metaTitle = data.metaTitle;
     if (data.metaDescription !== undefined) payload.metaDescription = data.metaDescription;
     if (data.keywords !== undefined) payload.keywords = data.keywords;
+    // Search & Tags
+    if (data.tags !== undefined) payload.tags = data.tags.map((name: string) => ({ name }));
+    if (data.searchKeywords !== undefined) payload.customSearchKeywords = data.searchKeywords;
 
     // Handle price update
     if (data.price !== undefined) {

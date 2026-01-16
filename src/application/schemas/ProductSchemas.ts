@@ -179,6 +179,15 @@ export const ProductUpdateInput = z.object({
     .max(255)
     .optional()
     .describe('SEO keywords (comma-separated)'),
+  // Search & Tags
+  tags: z
+    .array(z.string().min(1).max(255))
+    .optional()
+    .describe('Array of tag names (will be created if not existing)'),
+  searchKeywords: z
+    .array(z.string().min(1).max(255))
+    .optional()
+    .describe('Custom search keywords for better findability'),
 });
 export type ProductUpdateInput = z.infer<typeof ProductUpdateInput>;
 
