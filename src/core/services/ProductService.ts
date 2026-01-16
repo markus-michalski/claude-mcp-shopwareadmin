@@ -440,6 +440,10 @@ export class ProductService {
     if (data.stock !== undefined) payload.stock = data.stock;
     if (data.manufacturerId !== undefined) payload.manufacturerId = data.manufacturerId;
     if (data.customFields !== undefined) payload.customFields = data.customFields;
+    // SEO fields
+    if (data.metaTitle !== undefined) payload.metaTitle = data.metaTitle;
+    if (data.metaDescription !== undefined) payload.metaDescription = data.metaDescription;
+    if (data.keywords !== undefined) payload.keywords = data.keywords;
 
     // Handle price update
     if (data.price !== undefined) {

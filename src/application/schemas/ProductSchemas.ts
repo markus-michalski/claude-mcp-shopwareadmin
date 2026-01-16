@@ -163,6 +163,22 @@ export const ProductUpdateInput = z.object({
     .record(z.string(), z.unknown())
     .optional()
     .describe('Custom fields as key-value object (e.g., {"custom_stickdatei_stickmaß": "12,0 x 14,8 cm"})'),
+  // SEO fields
+  metaTitle: z
+    .string()
+    .max(255)
+    .optional()
+    .describe('SEO meta title'),
+  metaDescription: z
+    .string()
+    .max(255)
+    .optional()
+    .describe('SEO meta description'),
+  keywords: z
+    .string()
+    .max(255)
+    .optional()
+    .describe('SEO keywords (comma-separated)'),
 });
 export type ProductUpdateInput = z.infer<typeof ProductUpdateInput>;
 
