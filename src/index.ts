@@ -22,6 +22,7 @@ import { ContentService } from './core/services/ContentService.js';
 import { SnippetService } from './core/services/SnippetService.js';
 import { ManufacturerService } from './core/services/ManufacturerService.js';
 import { PropertyService } from './core/services/PropertyService.js';
+import { MailTemplateService } from './core/services/MailTemplateService.js';
 
 // Import schemas
 import {
@@ -42,6 +43,10 @@ import {
   GetPropertiesInput,
   GetManufacturersInput,
   SnippetListInput,
+  MailTemplateListInput,
+  MailTemplateGetInput,
+  MailTemplateUpdateInput,
+  MailTemplateSendTestInput,
 } from './application/schemas.js';
 
 // Load configuration
@@ -81,6 +86,12 @@ const contentService = new ContentService(
   snippetService,
   wikiService,
   logger
+);
+const mailTemplateService = new MailTemplateService(
+  shopwareApi,
+  cache,
+  logger,
+  config.shopware.defaultSalesChannelId
 );
 
 // Create MCP server
@@ -333,6 +344,60 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
         properties: {
           activeOnly: { type: 'boolean', default: true, description: 'Only active snippets' },
         },
+      },
+    },
+
+    // === MAIL TEMPLATE TOOLS ===
+    {
+      name: 'mail_template_list',
+      description: 'List all mail templates with their types (Order Confirmation, Customer Registration, etc.)',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          search: { type: 'string', maxLength: 255, description: 'Search in template type name or subject' },
+          limit: { type: 'integer', minimum: 1, maximum: 100, default: 50, description: 'Maximum results' },
+          offset: { type: 'integer', minimum: 0, default: 0, description: 'Pagination offset' },
+        },
+      },
+    },
+    {
+      name: 'mail_template_get',
+      description: 'Get mail template details including subject, HTML/plain content, and available Twig variables. Identify by ID or technical name.',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          id: { type: 'string', pattern: '^[0-9a-f]{32}$', description: 'Mail template ID (32-char hex)' },
+          technicalName: { type: 'string', description: 'Technical name (e.g., "order_confirmation_mail", "customer_register")' },
+        },
+      },
+    },
+    {
+      name: 'mail_template_update',
+      description: 'Update mail template content (subject, HTML body, plain text body). Supports Twig template syntax.',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          id: { type: 'string', pattern: '^[0-9a-f]{32}$', description: 'Mail template ID (32-char hex)' },
+          subject: { type: 'string', minLength: 1, maxLength: 998, description: 'New subject line (supports Twig: {{ order.orderNumber }})' },
+          contentHtml: { type: 'string', description: 'New HTML body (supports Twig templates)' },
+          contentPlain: { type: 'string', description: 'New plain text body (supports Twig templates)' },
+          senderName: { type: 'string', maxLength: 255, description: 'Sender display name' },
+          description: { type: 'string', maxLength: 65535, description: 'Admin description/notes' },
+        },
+        required: ['id'],
+      },
+    },
+    {
+      name: 'mail_template_send_test',
+      description: 'Send a test email to verify template rendering. Uses mock data for Twig variables.',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          mailTemplateId: { type: 'string', pattern: '^[0-9a-f]{32}$', description: 'Mail template ID to test' },
+          recipient: { type: 'string', format: 'email', description: 'Recipient email address' },
+          salesChannelId: { type: 'string', pattern: '^[0-9a-f]{32}$', description: 'Sales channel context (uses default if not provided)' },
+        },
+        required: ['mailTemplateId', 'recipient'],
       },
     },
   ],
@@ -589,6 +654,72 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
                 name: s.name,
                 active: s.active,
               })),
+            }, null, 2),
+          }],
+        };
+      }
+
+      // === MAIL TEMPLATE TOOLS ===
+      case 'mail_template_list': {
+        const input = MailTemplateListInput.parse(args);
+        const result = await mailTemplateService.list(input);
+        return {
+          content: [{
+            type: 'text',
+            text: JSON.stringify({
+              count: result.templates.length,
+              total: result.total,
+              templates: result.templates,
+            }, null, 2),
+          }],
+        };
+      }
+
+      case 'mail_template_get': {
+        const input = MailTemplateGetInput.parse(args);
+        const template = await mailTemplateService.get(input);
+        if (!template) {
+          return {
+            content: [{ type: 'text', text: JSON.stringify({ error: true, message: 'Mail template not found' }, null, 2) }],
+            isError: true,
+          };
+        }
+        return {
+          content: [{ type: 'text', text: JSON.stringify(template, null, 2) }],
+        };
+      }
+
+      case 'mail_template_update': {
+        const input = MailTemplateUpdateInput.parse(args);
+        const { id, ...updateData } = input;
+        const template = await mailTemplateService.update(id, updateData);
+        return {
+          content: [{
+            type: 'text',
+            text: JSON.stringify({
+              success: true,
+              message: 'Mail template updated',
+              template: {
+                id: template.id,
+                technicalName: template.templateType?.technicalName,
+                subject: template.subject,
+              },
+              updated: Object.keys(updateData),
+            }, null, 2),
+          }],
+        };
+      }
+
+      case 'mail_template_send_test': {
+        const input = MailTemplateSendTestInput.parse(args);
+        const result = await mailTemplateService.sendTest(input);
+        return {
+          content: [{
+            type: 'text',
+            text: JSON.stringify({
+              success: result.success,
+              message: `Test mail sent to ${result.recipient}`,
+              templateType: result.templateType,
             }, null, 2),
           }],
         };

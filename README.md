@@ -28,7 +28,13 @@ MCP Server for Shopware 6 product and content management via Claude Code.
 - `get_manufacturers` - List manufacturers/brands
 - `snippet_list` - List product snippets (for software descriptions via mmd-product-snippets plugin)
 
-**Total: 16 MCP Tools**
+### Mail Template Management (4 Tools)
+- `mail_template_list` - List all mail templates (Order Confirmation, Customer Registration, etc.)
+- `mail_template_get` - Get template details by ID or technical name (e.g., `order_confirmation_mail`)
+- `mail_template_update` - Update subject, HTML body, plain text body (supports Twig syntax)
+- `mail_template_send_test` - Send test email with mock data (rate limited: 5/minute per template)
+
+**Total: 20 MCP Tools**
 
 ## Installation
 
@@ -71,6 +77,7 @@ LOG_LEVEL=info
    - product_manufacturer: read
    - tax: read
    - currency: read
+   - mail_template: read, write (for mail template tools)
 4. Copy Client ID and Secret to `.env`
 
 ## Usage with Claude Code
@@ -105,6 +112,12 @@ claude mcp add --scope user --transport stdio shopwareadmin -- \
 > Create a new product "ALTCHA Forms Plugin" with price 49.00 in category "Shopware 6"
 > Generate SEO description for product SW-ALTCHA-001
 > Activate product with ID abc-123
+
+# Mail Templates
+> List all mail templates
+> Show me the order confirmation email template
+> Update the subject of the order confirmation mail to include the shop name
+> Send a test email for the customer registration template to test@example.com
 ```
 
 ## Style Profiles
