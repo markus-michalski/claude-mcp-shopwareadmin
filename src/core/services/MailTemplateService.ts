@@ -309,6 +309,8 @@ export class MailTemplateService {
       throw MCPError.notFound('Mail template', input.mailTemplateId);
     }
 
+    // Shopware API requires contentHtml, contentPlain, subject even in testMode
+    // testMode only generates mock data for Twig variables, not for the content itself
     const payload = {
       mailTemplateId: input.mailTemplateId,
       salesChannelId,
@@ -316,6 +318,10 @@ export class MailTemplateService {
       recipients: {
         [input.recipient]: input.recipient, // { email: displayName }
       },
+      contentHtml: template.contentHtml,
+      contentPlain: template.contentPlain,
+      subject: template.subject,
+      senderName: template.senderName ?? undefined,
     };
 
     try {
