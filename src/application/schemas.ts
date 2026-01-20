@@ -43,6 +43,13 @@ export {
   MailTemplateSendTestInput,
 } from './schemas/MailTemplateSchemas.js';
 
+// Flow schemas
+export {
+  FlowListInput,
+  FlowGetInput,
+  FlowToggleInput,
+} from './schemas/FlowSchemas.js';
+
 // Re-export types
 export type { ProductCreateInput as ProductCreateInputType } from './schemas/ProductSchemas.js';
 export type { ProductGetInput as ProductGetInputType } from './schemas/ProductSchemas.js';

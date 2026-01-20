@@ -23,6 +23,7 @@ import { SnippetService } from './core/services/SnippetService.js';
 import { ManufacturerService } from './core/services/ManufacturerService.js';
 import { PropertyService } from './core/services/PropertyService.js';
 import { MailTemplateService } from './core/services/MailTemplateService.js';
+import { FlowService } from './core/services/FlowService.js';
 
 // Import schemas
 import {
@@ -47,6 +48,9 @@ import {
   MailTemplateGetInput,
   MailTemplateUpdateInput,
   MailTemplateSendTestInput,
+  FlowListInput,
+  FlowGetInput,
+  FlowToggleInput,
 } from './application/schemas.js';
 
 // Load configuration
@@ -93,6 +97,7 @@ const mailTemplateService = new MailTemplateService(
   logger,
   config.shopware.defaultSalesChannelId
 );
+const flowService = new FlowService(shopwareApi, cache, logger);
 
 // Create MCP server
 const server = new Server(
@@ -398,6 +403,46 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
           salesChannelId: { type: 'string', pattern: '^[0-9a-f]{32}$', description: 'Sales channel context (uses default if not provided)' },
         },
         required: ['mailTemplateId', 'recipient'],
+      },
+    },
+
+    // === FLOW BUILDER TOOLS ===
+    {
+      name: 'flow_list',
+      description: 'List all Flow Builder flows with optional filters. Shows which flows send emails.',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          active: { type: 'boolean', description: 'Filter by active status' },
+          eventName: { type: 'string', maxLength: 255, description: 'Filter by event (e.g., "checkout.order.placed")' },
+          search: { type: 'string', maxLength: 255, description: 'Search in flow name or description' },
+          hasMailAction: { type: 'boolean', description: 'Filter to only flows that send emails' },
+          limit: { type: 'integer', minimum: 1, maximum: 100, default: 50, description: 'Max results' },
+          offset: { type: 'integer', minimum: 0, default: 0, description: 'Pagination offset' },
+        },
+      },
+    },
+    {
+      name: 'flow_get',
+      description: 'Get flow details including all sequences (actions and conditions). Identify by ID or name.',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          id: { type: 'string', pattern: '^[0-9a-f]{32}$', description: 'Flow ID (32-char hex)' },
+          name: { type: 'string', description: 'Flow name (exact match)' },
+        },
+      },
+    },
+    {
+      name: 'flow_toggle',
+      description: 'Activate or deactivate a flow (controls whether the flow executes on events)',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          id: { type: 'string', pattern: '^[0-9a-f]{32}$', description: 'Flow ID (32-char hex)' },
+          active: { type: 'boolean', description: 'New active status' },
+        },
+        required: ['id', 'active'],
       },
     },
   ],
@@ -720,6 +765,55 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
               success: result.success,
               message: `Test mail sent to ${result.recipient}`,
               templateType: result.templateType,
+            }, null, 2),
+          }],
+        };
+      }
+
+      // === FLOW BUILDER TOOLS ===
+      case 'flow_list': {
+        const input = FlowListInput.parse(args);
+        const result = await flowService.list(input);
+        return {
+          content: [{
+            type: 'text',
+            text: JSON.stringify({
+              count: result.flows.length,
+              total: result.total,
+              flows: result.flows,
+            }, null, 2),
+          }],
+        };
+      }
+
+      case 'flow_get': {
+        const input = FlowGetInput.parse(args);
+        const flow = await flowService.get(input);
+        if (!flow) {
+          return {
+            content: [{ type: 'text', text: JSON.stringify({ error: true, message: 'Flow not found' }, null, 2) }],
+            isError: true,
+          };
+        }
+        return {
+          content: [{ type: 'text', text: JSON.stringify(flow, null, 2) }],
+        };
+      }
+
+      case 'flow_toggle': {
+        const input = FlowToggleInput.parse(args);
+        const flow = await flowService.toggle(input);
+        return {
+          content: [{
+            type: 'text',
+            text: JSON.stringify({
+              success: true,
+              message: `Flow ${input.active ? 'activated' : 'deactivated'}`,
+              flow: {
+                id: flow.id,
+                name: flow.name,
+                active: flow.active,
+              },
             }, null, 2),
           }],
         };
