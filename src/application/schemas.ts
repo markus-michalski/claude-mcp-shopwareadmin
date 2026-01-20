@@ -35,6 +35,14 @@ export {
   SnippetListInput,
 } from './schemas/HelperSchemas.js';
 
+// Mail template schemas
+export {
+  MailTemplateListInput,
+  MailTemplateGetInput,
+  MailTemplateUpdateInput,
+  MailTemplateSendTestInput,
+} from './schemas/MailTemplateSchemas.js';
+
 // Re-export types
 export type { ProductCreateInput as ProductCreateInputType } from './schemas/ProductSchemas.js';
 export type { ProductGetInput as ProductGetInputType } from './schemas/ProductSchemas.js';
