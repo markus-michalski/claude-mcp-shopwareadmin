@@ -507,37 +507,40 @@ describe('ProductService', () => {
   });
 
   // ===========================================================================
-  // update() - Update product data
+  // update() - Update product data (via Sync API)
   // ===========================================================================
   describe('update', () => {
-    it('should update product name', async () => {
-      let capturedBody: Record<string, unknown> = {};
+    it('should update product name via Sync API', async () => {
+      let capturedSyncBody: Array<{ payload: Array<Record<string, unknown>> }> = [];
 
       server.use(
-        http.patch(`${BASE_URL}/api/product/:id`, async ({ request }) => {
-          capturedBody = await request.json() as Record<string, unknown>;
-          return HttpResponse.json({ data: { ...MOCK_PRODUCT, name: 'Updated Name' } });
+        http.post(`${BASE_URL}/api/_action/sync`, async ({ request }) => {
+          capturedSyncBody = await request.json() as typeof capturedSyncBody;
+          return HttpResponse.json({ success: true });
         })
       );
 
       await service.update(MOCK_PRODUCT_ID, { name: 'Updated Name' });
 
-      expect(capturedBody.name).toBe('Updated Name');
+      const payload = capturedSyncBody[0]?.payload?.[0];
+      expect(payload?.name).toBe('Updated Name');
+      expect(payload?.id).toBe(MOCK_PRODUCT_ID);
     });
 
     it('should update product price with correct structure', async () => {
-      let capturedBody: Record<string, unknown> = {};
+      let capturedSyncBody: Array<{ payload: Array<Record<string, unknown>> }> = [];
 
       server.use(
-        http.patch(`${BASE_URL}/api/product/:id`, async ({ request }) => {
-          capturedBody = await request.json() as Record<string, unknown>;
-          return HttpResponse.json({ data: MOCK_PRODUCT });
+        http.post(`${BASE_URL}/api/_action/sync`, async ({ request }) => {
+          capturedSyncBody = await request.json() as typeof capturedSyncBody;
+          return HttpResponse.json({ success: true });
         })
       );
 
       await service.update(MOCK_PRODUCT_ID, { price: 199.0 });
 
-      const priceArray = capturedBody.price as Array<{
+      const payload = capturedSyncBody[0]?.payload?.[0];
+      const priceArray = payload?.price as Array<{
         currencyId: string;
         gross: number;
         net: number;
@@ -547,12 +550,12 @@ describe('ProductService', () => {
     });
 
     it('should update multiple fields at once', async () => {
-      let capturedBody: Record<string, unknown> = {};
+      let capturedSyncBody: Array<{ payload: Array<Record<string, unknown>> }> = [];
 
       server.use(
-        http.patch(`${BASE_URL}/api/product/:id`, async ({ request }) => {
-          capturedBody = await request.json() as Record<string, unknown>;
-          return HttpResponse.json({ data: MOCK_PRODUCT });
+        http.post(`${BASE_URL}/api/_action/sync`, async ({ request }) => {
+          capturedSyncBody = await request.json() as typeof capturedSyncBody;
+          return HttpResponse.json({ success: true });
         })
       );
 
@@ -562,9 +565,10 @@ describe('ProductService', () => {
         stock: 50,
       });
 
-      expect(capturedBody.name).toBe('New Name');
-      expect(capturedBody.description).toBe('New Description');
-      expect(capturedBody.stock).toBe(50);
+      const payload = capturedSyncBody[0]?.payload?.[0];
+      expect(payload?.name).toBe('New Name');
+      expect(payload?.description).toBe('New Description');
+      expect(payload?.stock).toBe(50);
     });
 
     it('should return updated Product entity', async () => {
@@ -578,6 +582,17 @@ describe('ProductService', () => {
     });
 
     it('should throw NOT_FOUND for non-existent product', async () => {
+      // Override search to return empty for the not-found ID
+      server.use(
+        http.post(`${BASE_URL}/api/search/product`, async ({ request }) => {
+          const body = await request.json() as Record<string, unknown>;
+          if (Array.isArray(body.ids) && body.ids.includes('not-found-id')) {
+            return HttpResponse.json({ data: [], total: 0 });
+          }
+          return HttpResponse.json({ data: MOCK_PRODUCT_LIST, total: MOCK_PRODUCT_LIST.length });
+        })
+      );
+
       await expect(
         service.update('not-found-id', { name: 'Test' })
       ).rejects.toThrow(MCPError);
@@ -596,7 +611,7 @@ describe('ProductService', () => {
         })
       );
 
-      // Update should trigger one search request to return updated product
+      // Update should trigger search requests (fetch existing + re-fetch updated)
       await service.update(MOCK_PRODUCT_ID, { name: 'Updated' });
 
       // The update method fetches the product fresh, so searchRequestCount should be >= 1

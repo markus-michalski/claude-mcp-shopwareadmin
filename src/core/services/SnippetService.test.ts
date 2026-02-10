@@ -1,9 +1,13 @@
 /**
  * Tests for SnippetService
  *
- * Tests all snippet methods with TDD approach:
- * - list: Get all snippets with optional filters
+ * Tests all snippet methods:
+ * - list: Get all snippets with optional active filter
  * - getByIdentifier: Get snippet by unique identifier
+ * - getMultiple: Get multiple snippets by identifiers
+ *
+ * NOTE: Snippets use Shopware's translation system.
+ * No locale/position fields - translations resolved by API language context.
  */
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { http, HttpResponse } from 'msw';
@@ -43,25 +47,25 @@ describe('SnippetService', () => {
   });
 
   // ===========================================================================
-  // list() - Get all snippets with optional filters
+  // list() - Get all snippets with optional active filter
   // ===========================================================================
   describe('list', () => {
-    it('should return all snippets for given locale', async () => {
-      const result = await service.list('de-DE');
+    it('should return all active snippets by default', async () => {
+      const result = await service.list();
 
       expect(result).toBeDefined();
       expect(result.length).toBeGreaterThan(0);
+      expect(result.every((s) => s.active)).toBe(true);
     });
 
-    it('should filter active snippets only by default', async () => {
-      const result = await service.list('de-DE', true);
+    it('should filter active snippets when activeOnly is true', async () => {
+      const result = await service.list(true);
 
-      // All returned snippets should be active
       expect(result.every((s) => s.active)).toBe(true);
     });
 
     it('should include inactive snippets when activeOnly is false', async () => {
-      const result = await service.list('de-DE', false);
+      const result = await service.list(false);
 
       // Should include at least one inactive snippet
       const hasInactive = result.some((s) => !s.active);
@@ -72,7 +76,7 @@ describe('SnippetService', () => {
       vi.useFakeTimers();
 
       // First request
-      await service.list('de-DE', true);
+      await service.list(true);
 
       // Track API calls
       let requestCount = 0;
@@ -84,18 +88,18 @@ describe('SnippetService', () => {
       );
 
       // Second request should use cache
-      await service.list('de-DE', true);
+      await service.list(true);
       expect(requestCount).toBe(0);
 
       // After 11 minutes, cache should be expired
       vi.advanceTimersByTime(11 * 60 * 1000);
-      await service.list('de-DE', true);
+      await service.list(true);
       expect(requestCount).toBe(1);
 
       vi.useRealTimers();
     });
 
-    it('should send correct locale filter to API', async () => {
+    it('should send correct active filter to API', async () => {
       let capturedBody: Record<string, unknown> = {};
 
       server.use(
@@ -105,15 +109,15 @@ describe('SnippetService', () => {
         })
       );
 
-      await service.list('en-GB', true);
+      await service.list(true);
 
       const filters = capturedBody.filter as Array<{ field: string; value: unknown }>;
-      const localeFilter = filters?.find((f) => f.field === 'locale');
-      expect(localeFilter?.value).toBe('en-GB');
+      const activeFilter = filters?.find((f) => f.field === 'active');
+      expect(activeFilter?.value).toBe(true);
     });
 
     it('should map Shopware response to Snippet entities', async () => {
-      const result = await service.list('de-DE', true);
+      const result = await service.list(true);
 
       expect(result[0]).toMatchObject({
         id: expect.any(String),
@@ -121,17 +125,23 @@ describe('SnippetService', () => {
         name: expect.any(String),
         content: expect.any(String),
         active: true,
-        locale: 'de-DE',
       });
     });
 
-    it('should sort snippets by position', async () => {
-      const result = await service.list('de-DE', true);
+    it('should request sorting by identifier from API', async () => {
+      let capturedBody: Record<string, unknown> = {};
 
-      // Verify positions are in ascending order
-      for (let i = 1; i < result.length; i++) {
-        expect(result[i].position).toBeGreaterThanOrEqual(result[i - 1].position);
-      }
+      server.use(
+        http.post(`${BASE_URL}/api/search/mmd-product-snippet`, async ({ request }) => {
+          capturedBody = await request.json() as Record<string, unknown>;
+          return HttpResponse.json({ data: MOCK_SNIPPET_LIST_ACTIVE, total: 3 });
+        })
+      );
+
+      await service.list(true);
+
+      const sort = capturedBody.sort as Array<{ field: string; order: string }>;
+      expect(sort).toEqual([{ field: 'identifier', order: 'ASC' }]);
     });
   });
 
@@ -140,19 +150,19 @@ describe('SnippetService', () => {
   // ===========================================================================
   describe('getByIdentifier', () => {
     it('should return snippet by identifier', async () => {
-      const result = await service.getByIdentifier('requirements', 'de-DE');
+      const result = await service.getByIdentifier('requirements');
 
       expect(result).not.toBeNull();
       expect(result?.identifier).toBe('requirements');
     });
 
     it('should return null for non-existent identifier', async () => {
-      const result = await service.getByIdentifier('non-existent', 'de-DE');
+      const result = await service.getByIdentifier('non-existent');
 
       expect(result).toBeNull();
     });
 
-    it('should filter by locale', async () => {
+    it('should send identifier filter to API', async () => {
       let capturedBody: Record<string, unknown> = {};
 
       server.use(
@@ -162,18 +172,18 @@ describe('SnippetService', () => {
         })
       );
 
-      await service.getByIdentifier('requirements', 'en-GB');
+      await service.getByIdentifier('requirements');
 
       const filters = capturedBody.filter as Array<{ field: string; value: unknown }>;
-      const localeFilter = filters?.find((f) => f.field === 'locale');
-      expect(localeFilter?.value).toBe('en-GB');
+      const identifierFilter = filters?.find((f) => f.field === 'identifier');
+      expect(identifierFilter?.value).toBe('requirements');
     });
 
     it('should cache individual snippets', async () => {
       vi.useFakeTimers();
 
       // First request
-      await service.getByIdentifier('requirements', 'de-DE');
+      await service.getByIdentifier('requirements');
 
       // Track API calls
       let requestCount = 0;
@@ -185,21 +195,20 @@ describe('SnippetService', () => {
       );
 
       // Second request should use cache
-      await service.getByIdentifier('requirements', 'de-DE');
+      await service.getByIdentifier('requirements');
       expect(requestCount).toBe(0);
 
       vi.useRealTimers();
     });
 
     it('should only return active snippets', async () => {
-      // The inactive snippet should not be returned
-      const result = await service.getByIdentifier('deprecated-snippet', 'de-DE');
+      const result = await service.getByIdentifier('deprecated-snippet');
 
       expect(result).toBeNull();
     });
 
     it('should return full snippet with content', async () => {
-      const result = await service.getByIdentifier('requirements', 'de-DE');
+      const result = await service.getByIdentifier('requirements');
 
       expect(result).toMatchObject({
         id: MOCK_SNIPPET_REQUIREMENTS_ID,
@@ -217,8 +226,7 @@ describe('SnippetService', () => {
   describe('getMultiple', () => {
     it('should return multiple snippets by identifiers', async () => {
       const result = await service.getMultiple(
-        ['requirements', 'compatibility'],
-        'de-DE'
+        ['requirements', 'compatibility']
       );
 
       expect(result).toHaveLength(2);
@@ -228,8 +236,7 @@ describe('SnippetService', () => {
 
     it('should skip non-existent identifiers', async () => {
       const result = await service.getMultiple(
-        ['requirements', 'non-existent', 'compatibility'],
-        'de-DE'
+        ['requirements', 'non-existent', 'compatibility']
       );
 
       expect(result).toHaveLength(2);
@@ -237,8 +244,7 @@ describe('SnippetService', () => {
 
     it('should return empty array for no matches', async () => {
       const result = await service.getMultiple(
-        ['non-existent-1', 'non-existent-2'],
-        'de-DE'
+        ['non-existent-1', 'non-existent-2']
       );
 
       expect(result).toEqual([]);
@@ -246,8 +252,7 @@ describe('SnippetService', () => {
 
     it('should maintain order of requested identifiers', async () => {
       const result = await service.getMultiple(
-        ['compatibility', 'requirements'],
-        'de-DE'
+        ['compatibility', 'requirements']
       );
 
       expect(result[0].identifier).toBe('compatibility');
@@ -269,7 +274,7 @@ describe('SnippetService', () => {
         })
       );
 
-      const result = await service.getByIdentifier('requirements', 'de-DE');
+      const result = await service.getByIdentifier('requirements');
 
       expect(result).toMatchObject({
         id: MOCK_SNIPPET_REQUIREMENTS_ID,
@@ -277,30 +282,31 @@ describe('SnippetService', () => {
         name: 'Systemanforderungen',
         content: expect.any(String),
         active: true,
-        locale: 'de-DE',
-        position: 1,
         createdAt: expect.any(String),
         updatedAt: expect.any(String),
       });
     });
 
-    it('should handle missing optional fields', async () => {
+    it('should handle missing optional fields gracefully', async () => {
       server.use(
         http.post(`${BASE_URL}/api/search/mmd-product-snippet`, () => {
           return HttpResponse.json({
             data: [{
               ...MOCK_SNIPPET_REQUIREMENTS,
-              position: undefined,
+              name: null,
+              content: null,
             }],
             total: 1,
           });
         })
       );
 
-      const result = await service.getByIdentifier('requirements', 'de-DE');
+      const result = await service.getByIdentifier('requirements');
 
       expect(result).not.toBeNull();
-      expect(result?.position).toBe(0); // Default value
+      // Null values should be mapped to empty strings
+      expect(result?.name).toBe('');
+      expect(result?.content).toBe('');
     });
   });
 });

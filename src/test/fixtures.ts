@@ -591,8 +591,6 @@ export const MOCK_SNIPPET_REQUIREMENTS = {
 - MySQL 8.0 / MariaDB 10.5
 - OXID eShop 7.0 oder hoeher`,
   active: true,
-  locale: 'de-DE',
-  position: 1,
   createdAt: '2025-01-01T10:00:00.000Z',
   updatedAt: '2025-01-14T15:00:00.000Z',
 };
@@ -609,8 +607,6 @@ export const MOCK_SNIPPET_COMPATIBILITY = {
 | 7.1.x        | Vollstaendig getestet |
 | 7.0.x        | Basis-Support |`,
   active: true,
-  locale: 'de-DE',
-  position: 2,
   createdAt: '2025-01-01T10:00:00.000Z',
   updatedAt: '2025-01-14T15:00:00.000Z',
 };
@@ -626,8 +622,6 @@ composer require mmd/gallery
 ./vendor/bin/oe-console oe:module:activate mmd_gallery
 \`\`\``,
   active: true,
-  locale: 'de-DE',
-  position: 3,
   createdAt: '2025-01-01T10:00:00.000Z',
   updatedAt: '2025-01-14T15:00:00.000Z',
 };
@@ -638,8 +632,6 @@ export const MOCK_SNIPPET_INACTIVE = {
   name: 'Veralteter Snippet',
   content: 'Dieser Snippet ist nicht mehr aktiv.',
   active: false,
-  locale: 'de-DE',
-  position: 99,
   createdAt: '2024-01-01T10:00:00.000Z',
   updatedAt: '2024-06-01T10:00:00.000Z',
 };

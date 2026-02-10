@@ -80,6 +80,13 @@ export const handlers = [
       return HttpResponse.json({ data: [], total: 0 });
     }
 
+    // Check for ID-based search
+    if (Array.isArray(body.ids)) {
+      const ids = body.ids as string[];
+      const filtered = MOCK_PRODUCT_LIST.filter((p) => ids.includes(p.id));
+      return HttpResponse.json({ data: filtered, total: filtered.length });
+    }
+
     // Return filtered or full list based on criteria
     if (body.term) {
       // Full-text search
@@ -148,6 +155,22 @@ export const handlers = [
     };
 
     return HttpResponse.json({ data: updated });
+  }),
+
+  // Sync API (used by product update)
+  http.post(`${BASE_URL}/api/_action/sync`, async ({ request }) => {
+    const body = await request.json() as Array<{ payload: Array<{ id: string }> }>;
+
+    // Check if updating a non-existent product
+    const firstPayload = body[0]?.payload?.[0];
+    if (firstPayload?.id === 'not-found-id') {
+      return HttpResponse.json(
+        { errors: [{ status: '404', title: 'Not Found', detail: 'Entity not found' }] },
+        { status: 404 }
+      );
+    }
+
+    return HttpResponse.json({ success: true });
   }),
 
   // Delete product
