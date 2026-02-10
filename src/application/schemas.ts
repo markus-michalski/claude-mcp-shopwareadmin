@@ -50,6 +50,16 @@ export {
   FlowToggleInput,
 } from './schemas/FlowSchemas.js';
 
+// Media schemas
+export {
+  MediaListInput,
+  MediaGetInput,
+  MediaUpdateInput,
+  MediaSearchInput,
+  MediaAuditAltInput,
+  MediaUploadUrlInput,
+} from './schemas/MediaSchemas.js';
+
 // Re-export types
 export type { ProductCreateInput as ProductCreateInputType } from './schemas/ProductSchemas.js';
 export type { ProductGetInput as ProductGetInputType } from './schemas/ProductSchemas.js';

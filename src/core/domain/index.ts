@@ -7,3 +7,4 @@ export * from './Category.js';
 export * from './Content.js';
 export * from './Manufacturer.js';
 export * from './PropertyGroup.js';
+export * from './Media.js';

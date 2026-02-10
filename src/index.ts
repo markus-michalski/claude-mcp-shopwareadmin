@@ -24,6 +24,7 @@ import { ManufacturerService } from './core/services/ManufacturerService.js';
 import { PropertyService } from './core/services/PropertyService.js';
 import { MailTemplateService } from './core/services/MailTemplateService.js';
 import { FlowService } from './core/services/FlowService.js';
+import { MediaService } from './core/services/MediaService.js';
 
 // Import schemas
 import {
@@ -51,6 +52,12 @@ import {
   FlowListInput,
   FlowGetInput,
   FlowToggleInput,
+  MediaListInput,
+  MediaGetInput,
+  MediaUpdateInput,
+  MediaSearchInput,
+  MediaAuditAltInput,
+  MediaUploadUrlInput,
 } from './application/schemas.js';
 
 // Load configuration
@@ -98,6 +105,7 @@ const mailTemplateService = new MailTemplateService(
   config.shopware.defaultSalesChannelId
 );
 const flowService = new FlowService(shopwareApi, cache, logger);
+const mediaService = new MediaService(shopwareApi, cache, logger);
 
 // Create MCP server
 const server = new Server(
@@ -449,6 +457,83 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
           active: { type: 'boolean', description: 'New active status' },
         },
         required: ['id', 'active'],
+      },
+    },
+
+    // === MEDIA TOOLS ===
+    {
+      name: 'media_list',
+      description: 'List media with optional filters. Use hasAlt=false to find images missing alt text (BFSG compliance).',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          mediaFolderId: { type: 'string', pattern: '^[0-9a-f]{32}$', description: 'Filter by media folder (32-char hex)' },
+          mimeTypePrefix: { type: 'string', maxLength: 50, description: 'Filter by MIME type prefix (e.g., "image/", "video/")' },
+          hasAlt: { type: 'boolean', description: 'Filter by ALT text presence (true=has alt, false=missing alt). Critical for BFSG audit.' },
+          limit: { type: 'integer', minimum: 1, maximum: 100, default: 25, description: 'Max results' },
+          offset: { type: 'integer', minimum: 0, default: 0, description: 'Pagination offset' },
+        },
+      },
+    },
+    {
+      name: 'media_get',
+      description: 'Get media details including thumbnails, folder info, and which products use this media.',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          id: { type: 'string', pattern: '^[0-9a-f]{32}$', description: 'Media ID (32-char hex)' },
+        },
+        required: ['id'],
+      },
+    },
+    {
+      name: 'media_update',
+      description: 'Update media metadata (alt text, title). Critical for BFSG accessibility compliance.',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          id: { type: 'string', pattern: '^[0-9a-f]{32}$', description: 'Media ID (32-char hex)' },
+          alt: { type: 'string', maxLength: 255, description: 'New alt text (BFSG compliance)' },
+          title: { type: 'string', maxLength: 255, description: 'New title' },
+        },
+        required: ['id'],
+      },
+    },
+    {
+      name: 'media_search',
+      description: 'Full-text search across media (searches fileName, alt, title)',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          query: { type: 'string', minLength: 2, maxLength: 255, description: 'Search term' },
+          limit: { type: 'integer', minimum: 1, maximum: 50, default: 20, description: 'Max results' },
+        },
+        required: ['query'],
+      },
+    },
+    {
+      name: 'media_audit_alt',
+      description: 'BFSG Compliance Audit: Find all product images missing alt text. Returns affected products grouped by media. Essential for German Accessibility Act compliance.',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          onlyActive: { type: 'boolean', default: true, description: 'Only check media on active products (default: true)' },
+          limit: { type: 'integer', minimum: 1, maximum: 200, default: 100, description: 'Max media items to return' },
+        },
+      },
+    },
+    {
+      name: 'media_upload_url',
+      description: 'Upload media from URL. Shopware downloads the file. Two-step: creates media entity, then triggers URL download.',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          url: { type: 'string', format: 'uri', description: 'URL of the file to upload' },
+          alt: { type: 'string', maxLength: 255, description: 'Alt text (recommended for BFSG)' },
+          title: { type: 'string', maxLength: 255, description: 'Title' },
+          mediaFolderId: { type: 'string', pattern: '^[0-9a-f]{32}$', description: 'Target folder ID (32-char hex)' },
+        },
+        required: ['url'],
       },
     },
   ],
@@ -819,6 +904,112 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
                 id: flow.id,
                 name: flow.name,
                 active: flow.active,
+              },
+            }, null, 2),
+          }],
+        };
+      }
+
+      // === MEDIA TOOLS ===
+      case 'media_list': {
+        const input = MediaListInput.parse(args);
+        const result = await mediaService.list(input);
+        return {
+          content: [{
+            type: 'text',
+            text: JSON.stringify({
+              count: result.media.length,
+              total: result.total,
+              media: result.media,
+            }, null, 2),
+          }],
+        };
+      }
+
+      case 'media_get': {
+        const input = MediaGetInput.parse(args);
+        const media = await mediaService.get(input);
+        if (!media) {
+          return {
+            content: [{ type: 'text', text: JSON.stringify({ error: true, message: 'Media not found' }, null, 2) }],
+            isError: true,
+          };
+        }
+        return {
+          content: [{ type: 'text', text: JSON.stringify(media, null, 2) }],
+        };
+      }
+
+      case 'media_update': {
+        const input = MediaUpdateInput.parse(args);
+        const { id, ...updateData } = input;
+        const media = await mediaService.update(id, updateData);
+        return {
+          content: [{
+            type: 'text',
+            text: JSON.stringify({
+              success: true,
+              message: 'Media updated',
+              media: {
+                id: media.id,
+                fileName: media.fileName,
+                alt: media.alt,
+                title: media.title,
+              },
+              updated: Object.keys(updateData),
+            }, null, 2),
+          }],
+        };
+      }
+
+      case 'media_search': {
+        const input = MediaSearchInput.parse(args);
+        const results = await mediaService.search(input.query, input.limit ?? 20);
+        return {
+          content: [{
+            type: 'text',
+            text: JSON.stringify({
+              query: input.query,
+              count: results.length,
+              media: results,
+            }, null, 2),
+          }],
+        };
+      }
+
+      case 'media_audit_alt': {
+        const input = MediaAuditAltInput.parse(args);
+        const result = await mediaService.auditAlt(input);
+        return {
+          content: [{
+            type: 'text',
+            text: JSON.stringify({
+              audit: 'BFSG Alt-Text Compliance',
+              totalMediaChecked: result.totalMediaChecked,
+              missingAltCount: result.missingAltCount,
+              affectedProductCount: result.affectedProductCount,
+              items: result.items,
+              recommendation: result.missingAltCount > 0
+                ? `${result.missingAltCount} media items are missing alt text. Use media_update to add alt text for BFSG compliance.`
+                : 'All product media have alt text. BFSG compliant!',
+            }, null, 2),
+          }],
+        };
+      }
+
+      case 'media_upload_url': {
+        const input = MediaUploadUrlInput.parse(args);
+        const result = await mediaService.uploadFromUrl(input);
+        return {
+          content: [{
+            type: 'text',
+            text: JSON.stringify({
+              success: result.success,
+              message: 'Media uploaded from URL',
+              media: {
+                id: result.mediaId,
+                fileName: result.fileName,
+                url: result.url,
               },
             }, null, 2),
           }],
