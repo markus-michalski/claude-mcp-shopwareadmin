@@ -341,7 +341,6 @@ export const handlers = [
   http.get(`${BASE_URL}/api/mmd-product-snippet`, async ({ request }) => {
     const url = new URL(request.url);
     const activeOnly = url.searchParams.get('activeOnly') === 'true';
-    const locale = url.searchParams.get('locale') || 'de-DE';
 
     let snippets = [...MOCK_SNIPPET_LIST];
 
@@ -349,9 +348,6 @@ export const handlers = [
     if (activeOnly) {
       snippets = snippets.filter((s) => s.active);
     }
-
-    // Filter by locale
-    snippets = snippets.filter((s) => s.locale === locale);
 
     return HttpResponse.json({ data: snippets, total: snippets.length });
   }),
@@ -375,12 +371,6 @@ export const handlers = [
     const identifierFilter = filters?.find((f) => f.field === 'identifier');
     if (identifierFilter) {
       snippets = snippets.filter((s) => s.identifier === identifierFilter.value);
-    }
-
-    // Filter by locale
-    const localeFilter = filters?.find((f) => f.field === 'locale');
-    if (localeFilter) {
-      snippets = snippets.filter((s) => s.locale === localeFilter.value);
     }
 
     // Check for ID search
