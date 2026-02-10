@@ -26,6 +26,7 @@ import { MailTemplateService } from './core/services/MailTemplateService.js';
 import { FlowService } from './core/services/FlowService.js';
 import { MediaService } from './core/services/MediaService.js';
 import { OrderService } from './core/services/OrderService.js';
+import { CrossSellingService } from './core/services/CrossSellingService.js';
 
 // Import schemas
 import {
@@ -62,6 +63,11 @@ import {
   OrderListInput,
   OrderGetInput,
   OrderStatsInput,
+  CrossSellingListInput,
+  CrossSellingGetInput,
+  CrossSellingCreateInput,
+  CrossSellingUpdateInput,
+  CrossSellingSuggestInput,
 } from './application/schemas.js';
 
 // Load configuration
@@ -111,6 +117,7 @@ const mailTemplateService = new MailTemplateService(
 const flowService = new FlowService(shopwareApi, cache, logger);
 const mediaService = new MediaService(shopwareApi, cache, logger);
 const orderService = new OrderService(shopwareApi, cache, logger);
+const crossSellingService = new CrossSellingService(shopwareApi, cache, logger);
 
 // Create MCP server
 const server = new Server(
@@ -580,6 +587,80 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
           dateFrom: { type: 'string', description: 'Start date (ISO 8601, e.g., "2025-01-01")' },
           dateTo: { type: 'string', description: 'End date (ISO 8601, e.g., "2025-12-31")' },
         },
+      },
+    },
+
+    // === CROSS-SELLING TOOLS ===
+    {
+      name: 'cross_selling_list',
+      description: 'List all cross-selling groups for a product (accessories, similar products, etc.)',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          productId: { type: 'string', pattern: '^[0-9a-f]{32}$', description: 'Product ID (32-char hex)' },
+        },
+        required: ['productId'],
+      },
+    },
+    {
+      name: 'cross_selling_get',
+      description: 'Get cross-selling details including all assigned products',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          id: { type: 'string', pattern: '^[0-9a-f]{32}$', description: 'Cross-selling ID (32-char hex)' },
+        },
+        required: ['id'],
+      },
+    },
+    {
+      name: 'cross_selling_create',
+      description: 'Create a new cross-selling group for a product. Supports manual product lists and dynamic product streams.',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          productId: { type: 'string', pattern: '^[0-9a-f]{32}$', description: 'Source product ID (32-char hex)' },
+          name: { type: 'string', minLength: 1, maxLength: 255, description: 'Group name (e.g., "Accessories", "Similar Products")' },
+          type: { type: 'string', enum: ['productList', 'productStream'], default: 'productList', description: 'Type: manual list or dynamic stream' },
+          active: { type: 'boolean', default: true, description: 'Active status' },
+          position: { type: 'integer', minimum: 0, default: 1, description: 'Display position' },
+          sortBy: { type: 'string', enum: ['name', 'cheapestPrice', 'releaseDate', 'productNumber'], description: 'Sort field' },
+          sortDirection: { type: 'string', enum: ['ASC', 'DESC'], description: 'Sort direction' },
+          limit: { type: 'integer', minimum: 1, maximum: 100, default: 24, description: 'Max products to display' },
+          assignedProductIds: { type: 'array', items: { type: 'string' }, description: 'Product IDs to assign (for productList type)' },
+          productStreamId: { type: 'string', pattern: '^[0-9a-f]{32}$', description: 'Product stream ID (for productStream type)' },
+        },
+        required: ['productId', 'name'],
+      },
+    },
+    {
+      name: 'cross_selling_update',
+      description: 'Update a cross-selling group (name, assigned products, position, sorting, etc.)',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          id: { type: 'string', pattern: '^[0-9a-f]{32}$', description: 'Cross-selling ID (32-char hex)' },
+          name: { type: 'string', maxLength: 255, description: 'New name' },
+          active: { type: 'boolean', description: 'New active status' },
+          position: { type: 'integer', minimum: 0, description: 'New position' },
+          sortBy: { type: 'string', enum: ['name', 'cheapestPrice', 'releaseDate', 'productNumber'], description: 'New sort field' },
+          sortDirection: { type: 'string', enum: ['ASC', 'DESC'], description: 'New sort direction' },
+          limit: { type: 'integer', minimum: 1, maximum: 100, description: 'New limit' },
+          assignedProductIds: { type: 'array', items: { type: 'string' }, description: 'Replace all assigned products' },
+        },
+        required: ['id'],
+      },
+    },
+    {
+      name: 'cross_selling_suggest',
+      description: 'Get AI suggestion context for cross-selling. Returns the source product, category neighbors, and existing cross-sellings so Claude can recommend optimal product combinations.',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          productId: { type: 'string', pattern: '^[0-9a-f]{32}$', description: 'Product ID to get suggestions for (32-char hex)' },
+          limit: { type: 'integer', minimum: 5, maximum: 50, default: 20, description: 'Max candidate products' },
+        },
+        required: ['productId'],
       },
     },
   ],
@@ -1101,6 +1182,96 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
             text: JSON.stringify({
               statistics: stats,
               summary: `${stats.totalOrders} orders, ${stats.totalRevenue} ${stats.currencySymbol} total revenue, ${stats.averageOrderValue} ${stats.currencySymbol} average`,
+            }, null, 2),
+          }],
+        };
+      }
+
+      // === CROSS-SELLING TOOLS ===
+      case 'cross_selling_list': {
+        const input = CrossSellingListInput.parse(args);
+        const items = await crossSellingService.list(input);
+        return {
+          content: [{
+            type: 'text',
+            text: JSON.stringify({
+              productId: input.productId,
+              count: items.length,
+              crossSellings: items,
+            }, null, 2),
+          }],
+        };
+      }
+
+      case 'cross_selling_get': {
+        const input = CrossSellingGetInput.parse(args);
+        const cs = await crossSellingService.get(input);
+        if (!cs) {
+          return {
+            content: [{ type: 'text', text: JSON.stringify({ error: true, message: 'Cross-selling not found' }, null, 2) }],
+            isError: true,
+          };
+        }
+        return {
+          content: [{ type: 'text', text: JSON.stringify(cs, null, 2) }],
+        };
+      }
+
+      case 'cross_selling_create': {
+        const input = CrossSellingCreateInput.parse(args);
+        const cs = await crossSellingService.create(input);
+        return {
+          content: [{
+            type: 'text',
+            text: JSON.stringify({
+              success: true,
+              message: 'Cross-selling created',
+              crossSelling: {
+                id: cs.id,
+                name: cs.name,
+                type: cs.type,
+                assignedProductCount: cs.assignedProducts.length,
+              },
+            }, null, 2),
+          }],
+        };
+      }
+
+      case 'cross_selling_update': {
+        const input = CrossSellingUpdateInput.parse(args);
+        const { id, ...updateData } = input;
+        const cs = await crossSellingService.update(id, updateData);
+        return {
+          content: [{
+            type: 'text',
+            text: JSON.stringify({
+              success: true,
+              message: 'Cross-selling updated',
+              crossSelling: {
+                id: cs.id,
+                name: cs.name,
+                active: cs.active,
+                assignedProductCount: cs.assignedProducts.length,
+              },
+              updated: Object.keys(updateData),
+            }, null, 2),
+          }],
+        };
+      }
+
+      case 'cross_selling_suggest': {
+        const input = CrossSellingSuggestInput.parse(args);
+        const context = await crossSellingService.suggest(input);
+        return {
+          content: [{
+            type: 'text',
+            text: JSON.stringify({
+              suggestion: 'Cross-selling recommendation context',
+              sourceProduct: context.sourceProduct,
+              candidateCount: context.candidates.length,
+              candidates: context.candidates,
+              existingCrossSellings: context.existingCrossSellings,
+              instructions: 'Based on the source product and candidates, recommend which products to group as cross-sellings. Consider: category overlap, price range compatibility, complementary use cases.',
             }, null, 2),
           }],
         };

@@ -67,6 +67,15 @@ export {
   OrderStatsInput,
 } from './schemas/OrderSchemas.js';
 
+// Cross-Selling schemas
+export {
+  CrossSellingListInput,
+  CrossSellingGetInput,
+  CrossSellingCreateInput,
+  CrossSellingUpdateInput,
+  CrossSellingSuggestInput,
+} from './schemas/CrossSellingSchemas.js';
+
 // Re-export types
 export type { ProductCreateInput as ProductCreateInputType } from './schemas/ProductSchemas.js';
 export type { ProductGetInput as ProductGetInputType } from './schemas/ProductSchemas.js';

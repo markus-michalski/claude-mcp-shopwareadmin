@@ -9,3 +9,4 @@ export * from './Manufacturer.js';
 export * from './PropertyGroup.js';
 export * from './Media.js';
 export * from './Order.js';
+export * from './CrossSelling.js';
