@@ -10,3 +10,4 @@ export * from './PropertyGroup.js';
 export * from './Media.js';
 export * from './Order.js';
 export * from './CrossSelling.js';
+export * from './SeoUrl.js';

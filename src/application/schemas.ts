@@ -76,6 +76,14 @@ export {
   CrossSellingSuggestInput,
 } from './schemas/CrossSellingSchemas.js';
 
+// SEO URL schemas
+export {
+  SeoUrlListInput,
+  SeoUrlAuditInput,
+  SeoUrlUpdateInput,
+  SeoUrlGenerateInput,
+} from './schemas/SeoUrlSchemas.js';
+
 // Re-export types
 export type { ProductCreateInput as ProductCreateInputType } from './schemas/ProductSchemas.js';
 export type { ProductGetInput as ProductGetInputType } from './schemas/ProductSchemas.js';

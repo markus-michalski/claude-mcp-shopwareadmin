@@ -27,6 +27,7 @@ import { FlowService } from './core/services/FlowService.js';
 import { MediaService } from './core/services/MediaService.js';
 import { OrderService } from './core/services/OrderService.js';
 import { CrossSellingService } from './core/services/CrossSellingService.js';
+import { SeoUrlService } from './core/services/SeoUrlService.js';
 
 // Import schemas
 import {
@@ -68,6 +69,10 @@ import {
   CrossSellingCreateInput,
   CrossSellingUpdateInput,
   CrossSellingSuggestInput,
+  SeoUrlListInput,
+  SeoUrlAuditInput,
+  SeoUrlUpdateInput,
+  SeoUrlGenerateInput,
 } from './application/schemas.js';
 
 // Load configuration
@@ -118,6 +123,7 @@ const flowService = new FlowService(shopwareApi, cache, logger);
 const mediaService = new MediaService(shopwareApi, cache, logger);
 const orderService = new OrderService(shopwareApi, cache, logger);
 const crossSellingService = new CrossSellingService(shopwareApi, cache, logger);
+const seoUrlService = new SeoUrlService(shopwareApi, cache, logger);
 
 // Create MCP server
 const server = new Server(
@@ -661,6 +667,63 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
           limit: { type: 'integer', minimum: 5, maximum: 50, default: 20, description: 'Max candidate products' },
         },
         required: ['productId'],
+      },
+    },
+
+    // === SEO URL TOOLS ===
+    {
+      name: 'seo_url_list',
+      description: 'List SEO URLs with optional filters for route type, sales channel, canonical status, and search. Useful for inspecting URL structure.',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          routeName: { type: 'string', enum: ['frontend.detail.page', 'frontend.navigation.page', 'frontend.landing.page'], description: 'Filter by route (product, category, landing page)' },
+          salesChannelId: { type: 'string', pattern: '^[0-9a-f]{32}$', description: 'Filter by sales channel (32-char hex)' },
+          foreignKey: { type: 'string', pattern: '^[0-9a-f]{32}$', description: 'Filter by entity ID (product/category ID)' },
+          isCanonical: { type: 'boolean', description: 'Filter by canonical status' },
+          isDeleted: { type: 'boolean', description: 'Filter by deleted status' },
+          search: { type: 'string', minLength: 2, maxLength: 255, description: 'Search in SEO path' },
+          limit: { type: 'integer', minimum: 1, maximum: 100, default: 25, description: 'Max results' },
+          offset: { type: 'integer', minimum: 0, default: 0, description: 'Pagination offset' },
+        },
+      },
+    },
+    {
+      name: 'seo_url_audit',
+      description: 'Audit SEO URLs for issues: missing canonicals, duplicate paths, deleted URLs. Returns categorized issues with severity levels.',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          routeName: { type: 'string', enum: ['frontend.detail.page', 'frontend.navigation.page', 'frontend.landing.page'], description: 'Audit only specific route type' },
+          salesChannelId: { type: 'string', pattern: '^[0-9a-f]{32}$', description: 'Audit only specific sales channel' },
+          limit: { type: 'integer', minimum: 10, maximum: 500, default: 200, description: 'Max URLs to check' },
+        },
+      },
+    },
+    {
+      name: 'seo_url_update',
+      description: 'Update a SEO URL (change path, set canonical, mark as deleted). Setting seoPathInfo automatically marks the URL as manually modified (isModified=true).',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          id: { type: 'string', pattern: '^[0-9a-f]{32}$', description: 'SEO URL ID (32-char hex)' },
+          seoPathInfo: { type: 'string', minLength: 1, maxLength: 2048, description: 'New SEO path (e.g., "my-product-name")' },
+          isCanonical: { type: 'boolean', description: 'Set as canonical URL' },
+          isDeleted: { type: 'boolean', description: 'Mark as deleted' },
+        },
+        required: ['id'],
+      },
+    },
+    {
+      name: 'seo_url_generate',
+      description: 'Trigger SEO URL regeneration for a route type and sales channel. Only non-modified URLs (isModified=false) will be regenerated.',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          routeName: { type: 'string', enum: ['frontend.detail.page', 'frontend.navigation.page', 'frontend.landing.page'], description: 'Route to regenerate SEO URLs for' },
+          salesChannelId: { type: 'string', pattern: '^[0-9a-f]{32}$', description: 'Sales channel to regenerate for (32-char hex)' },
+        },
+        required: ['routeName', 'salesChannelId'],
       },
     },
   ],
@@ -1272,6 +1335,81 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
               candidates: context.candidates,
               existingCrossSellings: context.existingCrossSellings,
               instructions: 'Based on the source product and candidates, recommend which products to group as cross-sellings. Consider: category overlap, price range compatibility, complementary use cases.',
+            }, null, 2),
+          }],
+        };
+      }
+
+      // === SEO URL TOOLS ===
+      case 'seo_url_list': {
+        const input = SeoUrlListInput.parse(args);
+        const result = await seoUrlService.list(input);
+        return {
+          content: [{
+            type: 'text',
+            text: JSON.stringify({
+              count: result.urls.length,
+              total: result.total,
+              urls: result.urls,
+            }, null, 2),
+          }],
+        };
+      }
+
+      case 'seo_url_audit': {
+        const input = SeoUrlAuditInput.parse(args);
+        const result = await seoUrlService.audit(input);
+        return {
+          content: [{
+            type: 'text',
+            text: JSON.stringify({
+              audit: 'SEO URL Health Check',
+              totalUrlsChecked: result.totalUrlsChecked,
+              issueCount: result.issueCount,
+              issuesByType: result.issuesByType,
+              issues: result.issues,
+              recommendation: result.issueCount > 0
+                ? `${result.issueCount} issue(s) found. Use seo_url_update to fix individual URLs or seo_url_generate to regenerate.`
+                : 'No issues found. SEO URLs are healthy!',
+            }, null, 2),
+          }],
+        };
+      }
+
+      case 'seo_url_update': {
+        const input = SeoUrlUpdateInput.parse(args);
+        const { id, ...updateData } = input;
+        const seoUrl = await seoUrlService.update(id, updateData);
+        return {
+          content: [{
+            type: 'text',
+            text: JSON.stringify({
+              success: true,
+              message: 'SEO URL updated',
+              seoUrl: {
+                id: seoUrl.id,
+                seoPathInfo: seoUrl.seoPathInfo,
+                isCanonical: seoUrl.isCanonical,
+                isModified: seoUrl.isModified,
+                isDeleted: seoUrl.isDeleted,
+              },
+              updated: Object.keys(updateData),
+            }, null, 2),
+          }],
+        };
+      }
+
+      case 'seo_url_generate': {
+        const input = SeoUrlGenerateInput.parse(args);
+        const result = await seoUrlService.generate(input);
+        return {
+          content: [{
+            type: 'text',
+            text: JSON.stringify({
+              success: result.success,
+              message: result.message,
+              routeName: input.routeName,
+              salesChannelId: input.salesChannelId,
             }, null, 2),
           }],
         };
