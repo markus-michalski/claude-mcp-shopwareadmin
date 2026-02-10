@@ -25,6 +25,7 @@ import { PropertyService } from './core/services/PropertyService.js';
 import { MailTemplateService } from './core/services/MailTemplateService.js';
 import { FlowService } from './core/services/FlowService.js';
 import { MediaService } from './core/services/MediaService.js';
+import { OrderService } from './core/services/OrderService.js';
 
 // Import schemas
 import {
@@ -58,6 +59,9 @@ import {
   MediaSearchInput,
   MediaAuditAltInput,
   MediaUploadUrlInput,
+  OrderListInput,
+  OrderGetInput,
+  OrderStatsInput,
 } from './application/schemas.js';
 
 // Load configuration
@@ -106,6 +110,7 @@ const mailTemplateService = new MailTemplateService(
 );
 const flowService = new FlowService(shopwareApi, cache, logger);
 const mediaService = new MediaService(shopwareApi, cache, logger);
+const orderService = new OrderService(shopwareApi, cache, logger);
 
 // Create MCP server
 const server = new Server(
@@ -534,6 +539,47 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
           mediaFolderId: { type: 'string', pattern: '^[0-9a-f]{32}$', description: 'Target folder ID (32-char hex)' },
         },
         required: ['url'],
+      },
+    },
+
+    // === ORDER TOOLS (read-only) ===
+    {
+      name: 'order_list',
+      description: 'List orders with optional filters for status, payment, delivery, customer, and date range. Sorted by date (newest first).',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          orderStatus: { type: 'string', enum: ['open', 'in_progress', 'completed', 'cancelled'], description: 'Filter by order status' },
+          paymentStatus: { type: 'string', enum: ['open', 'authorized', 'paid', 'paid_partially', 'refunded', 'refunded_partially', 'failed', 'cancelled', 'unconfirmed', 'reminded', 'chargeback'], description: 'Filter by payment status' },
+          deliveryStatus: { type: 'string', enum: ['open', 'shipped', 'shipped_partially', 'returned', 'returned_partially', 'cancelled'], description: 'Filter by delivery status' },
+          customerEmail: { type: 'string', maxLength: 254, description: 'Filter by customer email (partial match)' },
+          dateFrom: { type: 'string', description: 'Filter orders from this date (ISO 8601, e.g., "2025-01-01")' },
+          dateTo: { type: 'string', description: 'Filter orders until this date (ISO 8601, e.g., "2025-12-31")' },
+          limit: { type: 'integer', minimum: 1, maximum: 100, default: 25, description: 'Max results' },
+          offset: { type: 'integer', minimum: 0, default: 0, description: 'Pagination offset' },
+        },
+      },
+    },
+    {
+      name: 'order_get',
+      description: 'Get full order details including line items, transactions, deliveries, and addresses. Identify by ID or order number.',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          id: { type: 'string', pattern: '^[0-9a-f]{32}$', description: 'Order ID (32-char hex)' },
+          orderNumber: { type: 'string', description: 'Order number (e.g., "10001")' },
+        },
+      },
+    },
+    {
+      name: 'order_stats',
+      description: 'Get aggregated order statistics: total orders, revenue, average order value, and breakdowns by status. Optional date range filter.',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          dateFrom: { type: 'string', description: 'Start date (ISO 8601, e.g., "2025-01-01")' },
+          dateTo: { type: 'string', description: 'End date (ISO 8601, e.g., "2025-12-31")' },
+        },
       },
     },
   ],
@@ -1011,6 +1057,50 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
                 fileName: result.fileName,
                 url: result.url,
               },
+            }, null, 2),
+          }],
+        };
+      }
+
+      // === ORDER TOOLS (read-only) ===
+      case 'order_list': {
+        const input = OrderListInput.parse(args);
+        const result = await orderService.list(input);
+        return {
+          content: [{
+            type: 'text',
+            text: JSON.stringify({
+              count: result.orders.length,
+              total: result.total,
+              orders: result.orders,
+            }, null, 2),
+          }],
+        };
+      }
+
+      case 'order_get': {
+        const input = OrderGetInput.parse(args);
+        const order = await orderService.get(input);
+        if (!order) {
+          return {
+            content: [{ type: 'text', text: JSON.stringify({ error: true, message: 'Order not found' }, null, 2) }],
+            isError: true,
+          };
+        }
+        return {
+          content: [{ type: 'text', text: JSON.stringify(order, null, 2) }],
+        };
+      }
+
+      case 'order_stats': {
+        const input = OrderStatsInput.parse(args);
+        const stats = await orderService.stats(input);
+        return {
+          content: [{
+            type: 'text',
+            text: JSON.stringify({
+              statistics: stats,
+              summary: `${stats.totalOrders} orders, ${stats.totalRevenue} ${stats.currencySymbol} total revenue, ${stats.averageOrderValue} ${stats.currencySymbol} average`,
             }, null, 2),
           }],
         };
