@@ -19,6 +19,7 @@ interface TokenResponse {
 export class ShopwareAuthenticator {
   private accessToken: string | null = null;
   private tokenExpiresAt: number = 0;
+  private refreshPromise: Promise<string> | null = null;
 
   constructor(
     private readonly baseUrl: string,
@@ -32,6 +33,7 @@ export class ShopwareAuthenticator {
    *
    * Returns cached token if still valid, otherwise requests a new one.
    * Includes a 60-second buffer to prevent edge-case expiration issues.
+   * Deduplicates concurrent refresh requests to prevent race conditions.
    */
   async getAccessToken(): Promise<string> {
     // Token still valid? (with 60s buffer)
@@ -40,28 +42,62 @@ export class ShopwareAuthenticator {
       return this.accessToken;
     }
 
+    // Deduplicate concurrent token refresh requests
+    if (this.refreshPromise) {
+      this.logger.debug('Waiting for existing token refresh');
+      return this.refreshPromise;
+    }
+
+    this.refreshPromise = this.fetchNewToken().finally(() => {
+      this.refreshPromise = null;
+    });
+
+    return this.refreshPromise;
+  }
+
+  /**
+   * Fetch a new OAuth2 token from Shopware
+   */
+  private async fetchNewToken(): Promise<string> {
     this.logger.debug('Requesting new OAuth2 token');
 
-    const response = await fetch(`${this.baseUrl}/api/oauth/token`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        grant_type: 'client_credentials',
-        client_id: this.clientId,
-        client_secret: this.clientSecret,
-      }),
-    });
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 15000);
+
+    let response: Response;
+    try {
+      response = await fetch(`${this.baseUrl}/api/oauth/token`, {
+        method: 'POST',
+        signal: controller.signal,
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          grant_type: 'client_credentials',
+          client_id: this.clientId,
+          client_secret: this.clientSecret,
+        }),
+      });
+    } catch (error) {
+      clearTimeout(timeoutId);
+      if (error instanceof Error && error.name === 'AbortError') {
+        throw new MCPError(
+          'OAuth2 token request timed out',
+          ErrorCode.AUTH_FAILED,
+          true,
+          'The Shopware server did not respond in time'
+        );
+      }
+      throw error;
+    } finally {
+      clearTimeout(timeoutId);
+    }
 
     if (!response.ok) {
       const errorBody = await response.text();
-      // SECURITY: Do not log full error body - may contain sensitive data
       this.logger.error('OAuth2 authentication failed', {
         status: response.status,
         bodyLength: errorBody.length,
-        // Only log first 100 chars, sanitized of potential secrets
-        bodyPreview: errorBody.slice(0, 100).replace(/[a-f0-9]{32,}/gi, '[REDACTED]'),
       });
 
       if (response.status === 401) {

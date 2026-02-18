@@ -34,6 +34,11 @@ const MAX_RATE_LIMIT_RETRIES = 3;
 const RATE_LIMIT_BASE_DELAY = 1000;
 
 /**
+ * Default request timeout (ms) - prevents hanging on unresponsive Shopware
+ */
+const REQUEST_TIMEOUT_MS = 30000;
+
+/**
  * HTTP client for Shopware 6 Admin API
  *
  * Handles authentication, request formatting, and error handling.
@@ -65,8 +70,12 @@ export class ShopwareApiClient {
 
     this.logger.debug('API request', { method, endpoint, retryCount });
 
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+
     const fetchOptions: RequestInit = {
       method,
+      signal: controller.signal,
       headers: {
         Authorization: `Bearer ${token}`,
         'Content-Type': 'application/json',
@@ -75,10 +84,27 @@ export class ShopwareApiClient {
     };
     if (body) {
       const jsonBody = JSON.stringify(body);
-      this.logger.info('API Request Body', { method, endpoint, body: jsonBody });
+      this.logger.debug('API request body', { method, endpoint, bodyLength: jsonBody.length });
       fetchOptions.body = jsonBody;
     }
-    const response = await fetch(url, fetchOptions);
+
+    let response: Response;
+    try {
+      response = await fetch(url, fetchOptions);
+    } catch (error) {
+      clearTimeout(timeoutId);
+      if (error instanceof Error && error.name === 'AbortError') {
+        throw new MCPError(
+          `Shopware API request timed out after ${REQUEST_TIMEOUT_MS / 1000}s: ${endpoint}`,
+          ErrorCode.API_ERROR,
+          true,
+          'The Shopware server did not respond in time. Try again later.'
+        );
+      }
+      throw error;
+    } finally {
+      clearTimeout(timeoutId);
+    }
 
     // Handle 401 - invalidate token and retry once
     if (response.status === 401) {
@@ -86,8 +112,12 @@ export class ShopwareApiClient {
       this.authenticator.invalidateToken();
       const newToken = await this.authenticator.getAccessToken();
 
+      const retryController = new AbortController();
+      const retryTimeoutId = setTimeout(() => retryController.abort(), REQUEST_TIMEOUT_MS);
+
       const retryOptions: RequestInit = {
         method,
+        signal: retryController.signal,
         headers: {
           Authorization: `Bearer ${newToken}`,
           'Content-Type': 'application/json',
@@ -97,7 +127,24 @@ export class ShopwareApiClient {
       if (body) {
         retryOptions.body = JSON.stringify(body);
       }
-      const retryResponse = await fetch(url, retryOptions);
+
+      let retryResponse: Response;
+      try {
+        retryResponse = await fetch(url, retryOptions);
+      } catch (error) {
+        clearTimeout(retryTimeoutId);
+        if (error instanceof Error && error.name === 'AbortError') {
+          throw new MCPError(
+            `Shopware API retry timed out after ${REQUEST_TIMEOUT_MS / 1000}s: ${endpoint}`,
+            ErrorCode.API_ERROR,
+            true,
+            'The Shopware server did not respond in time. Try again later.'
+          );
+        }
+        throw error;
+      } finally {
+        clearTimeout(retryTimeoutId);
+      }
 
       if (!retryResponse.ok) {
         throw await this.handleErrorResponse(retryResponse, endpoint);
@@ -205,11 +252,11 @@ export class ShopwareApiClient {
     this.logger.error('Shopware API error', {
       status: response.status,
       endpoint,
-      body: errorBody.slice(0, 1000),
+      bodyPreview: errorBody.slice(0, 200),
     });
 
     // Parse Shopware error format if possible
-    let message = errorBody;
+    let message = 'Unknown error';
     try {
       const errorJson = JSON.parse(errorBody);
       if (errorJson.errors && Array.isArray(errorJson.errors)) {
@@ -218,7 +265,8 @@ export class ShopwareApiClient {
           .join('; ');
       }
     } catch {
-      // Use raw body as message
+      // Use truncated raw body as fallback
+      message = errorBody.slice(0, 200);
     }
 
     // Map HTTP status to appropriate error
@@ -235,9 +283,10 @@ export class ShopwareApiClient {
       case 500:
       case 502:
       case 503:
-        return MCPError.apiError(response.status, message, true);
+        // Don't expose internal Shopware errors to client
+        return MCPError.apiError(response.status, 'Shopware server error', true);
       default:
-        return MCPError.apiError(response.status, message, false);
+        return MCPError.apiError(response.status, message.slice(0, 200), false);
     }
   }
 }

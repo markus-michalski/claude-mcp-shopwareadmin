@@ -145,7 +145,11 @@ export function loadConfig(): Config {
       ttlProperties: parseIntEnv('CACHE_TTL_PROPERTIES', 3600000),
       ttlSnippets: parseIntEnv('CACHE_TTL_SNIPPETS', 300000),
     },
-    logLevel: (process.env['LOG_LEVEL'] as LogLevel) ?? 'info',
+    logLevel: (['debug', 'info', 'warn', 'error'] as const).includes(
+      process.env['LOG_LEVEL'] as LogLevel
+    )
+      ? (process.env['LOG_LEVEL'] as LogLevel)
+      : 'info',
   };
 }
 
@@ -157,7 +161,7 @@ export function validateConfig(config: Config): void {
   try {
     const shopwareUrl = new URL(config.shopware.url);
     // SECURITY: Warn if not using HTTPS (credentials could be exposed)
-    if (shopwareUrl.protocol !== 'https:' && !shopwareUrl.hostname.includes('localhost')) {
+    if (shopwareUrl.protocol !== 'https:' && shopwareUrl.hostname !== 'localhost' && shopwareUrl.hostname !== '127.0.0.1') {
       console.error('[SECURITY WARNING] SHOPWARE_URL is not using HTTPS. Credentials may be transmitted in plain text!');
     }
   } catch {

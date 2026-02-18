@@ -14,10 +14,38 @@ interface CacheEntry<T> {
  * Suitable for caching categories, properties, and other
  * relatively static data that doesn't change often.
  */
+/**
+ * Maximum cache entries before forced pruning
+ */
+const MAX_CACHE_SIZE = 500;
+
+/**
+ * Auto-prune interval (60 seconds)
+ */
+const PRUNE_INTERVAL_MS = 60000;
+
 export class InMemoryCache {
   private readonly cache = new Map<string, CacheEntry<unknown>>();
+  private pruneTimer: ReturnType<typeof setInterval> | null = null;
 
-  constructor(private readonly logger: Logger) {}
+  constructor(private readonly logger: Logger) {
+    // Auto-prune expired entries periodically
+    this.pruneTimer = setInterval(() => this.prune(), PRUNE_INTERVAL_MS);
+    // Allow Node.js to exit even if timer is running
+    if (this.pruneTimer.unref) {
+      this.pruneTimer.unref();
+    }
+  }
+
+  /**
+   * Stop the auto-prune timer (for clean shutdown)
+   */
+  dispose(): void {
+    if (this.pruneTimer) {
+      clearInterval(this.pruneTimer);
+      this.pruneTimer = null;
+    }
+  }
 
   /**
    * Get a value from cache
@@ -54,6 +82,12 @@ export class InMemoryCache {
     };
 
     this.cache.set(key, entry);
+
+    // Prevent unbounded growth
+    if (this.cache.size > MAX_CACHE_SIZE) {
+      this.prune();
+    }
+
     this.logger.debug('Cache set', { key, ttlMs });
   }
 

@@ -28,7 +28,7 @@ export const ProductGenerateContentInput = z.object({
     .default(true)
     .describe('Include available snippets (software style only)'),
   snippetIds: z
-    .array(z.string())
+    .array(z.string().min(1).max(100))
     .optional()
     .describe('Specific snippet identifiers to include'),
 });

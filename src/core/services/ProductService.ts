@@ -300,12 +300,6 @@ export class ProductService {
         return null;
       }
 
-      // Debug: Log raw customFields from API
-      this.logger.info('Raw customFields from API', {
-        productNumber: rawProduct.productNumber,
-        customFields: JSON.stringify(rawProduct.customFields)
-      });
-
       const product = this.mapToProduct(rawProduct);
 
       // Cache the result
@@ -471,7 +465,7 @@ export class ProductService {
         payload: [payload],
       }];
 
-      this.logger.info('Sync payload', { syncPayload: JSON.stringify(syncPayload) });
+      this.logger.debug('Sync payload', { entity: 'product', payloadSize: JSON.stringify(syncPayload).length });
       await this.api.post('/api/_action/sync', syncPayload);
       this.invalidateCache(id);
 

@@ -38,10 +38,12 @@ export const OrderListInput = z.object({
     .describe('Filter by customer email (partial match)'),
   dateFrom: z
     .string()
+    .regex(/^\d{4}-\d{2}-\d{2}(T\d{2}:\d{2}:\d{2})?$/, 'Date must be ISO 8601 format (YYYY-MM-DD or YYYY-MM-DDTHH:MM:SS)')
     .optional()
     .describe('Filter orders from this date (ISO 8601, e.g., "2025-01-01")'),
   dateTo: z
     .string()
+    .regex(/^\d{4}-\d{2}-\d{2}(T\d{2}:\d{2}:\d{2})?$/, 'Date must be ISO 8601 format (YYYY-MM-DD or YYYY-MM-DDTHH:MM:SS)')
     .optional()
     .describe('Filter orders until this date (ISO 8601, e.g., "2025-12-31")'),
   limit: z
@@ -86,10 +88,12 @@ export type OrderGetInput = z.infer<typeof OrderGetInput>;
 export const OrderStatsInput = z.object({
   dateFrom: z
     .string()
+    .regex(/^\d{4}-\d{2}-\d{2}(T\d{2}:\d{2}:\d{2})?$/, 'Date must be ISO 8601 format (YYYY-MM-DD or YYYY-MM-DDTHH:MM:SS)')
     .optional()
     .describe('Start date for statistics (ISO 8601, e.g., "2025-01-01")'),
   dateTo: z
     .string()
+    .regex(/^\d{4}-\d{2}-\d{2}(T\d{2}:\d{2}:\d{2})?$/, 'Date must be ISO 8601 format (YYYY-MM-DD or YYYY-MM-DDTHH:MM:SS)')
     .optional()
     .describe('End date for statistics (ISO 8601, e.g., "2025-12-31")'),
 });

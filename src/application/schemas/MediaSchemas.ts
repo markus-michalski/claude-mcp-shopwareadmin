@@ -20,7 +20,7 @@ export const MediaListInput = z.object({
   ),
   mimeTypePrefix: z
     .string()
-    .max(50, 'MIME type prefix too long')
+    .regex(/^[a-z]+\/$/, 'MIME type prefix must be format "type/" (e.g., "image/", "video/")')
     .optional()
     .describe('Filter by MIME type prefix (e.g., "image/", "video/")'),
   hasAlt: z
@@ -116,6 +116,20 @@ export const MediaUploadUrlInput = z.object({
     .string()
     .url('Invalid URL format')
     .max(2048, 'URL too long')
+    .refine(
+      (url) => url.startsWith('https://') || url.startsWith('http://'),
+      'Only HTTP/HTTPS URLs are allowed'
+    )
+    .refine((url) => {
+      try {
+        const hostname = new URL(url).hostname.toLowerCase();
+        const blocked = ['localhost', '127.', '0.0.0.0', '169.254.', '10.', '172.16.', '172.17.',
+          '172.18.', '172.19.', '172.20.', '172.21.', '172.22.', '172.23.', '172.24.',
+          '172.25.', '172.26.', '172.27.', '172.28.', '172.29.', '172.30.', '172.31.',
+          '192.168.', '[::1]'];
+        return !blocked.some(b => hostname === b || hostname.startsWith(b));
+      } catch { return false; }
+    }, 'Internal/private network URLs are not allowed')
     .describe('URL of the file to upload (Shopware downloads it)'),
   alt: z
     .string()

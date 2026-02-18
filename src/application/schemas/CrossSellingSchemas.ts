@@ -70,7 +70,7 @@ export const CrossSellingCreateInput = z.object({
     .default(24)
     .describe('Max products to display'),
   assignedProductIds: z
-    .array(z.string())
+    .array(shopwareId('Invalid product ID format'))
     .optional()
     .describe('Product IDs to assign (for type=productList)'),
   productStreamId: shopwareIdOptional('Invalid product stream ID format').describe(
@@ -96,7 +96,7 @@ export const CrossSellingUpdateInput = z.object({
   sortDirection: z.enum(['ASC', 'DESC']).optional().describe('New sort direction'),
   limit: z.number().int().min(1).max(100).optional().describe('New limit'),
   assignedProductIds: z
-    .array(z.string())
+    .array(shopwareId('Invalid product ID format'))
     .optional()
     .describe('Replace assigned products (for type=productList)'),
 });
