@@ -27,53 +27,75 @@ import type {
 import { ErrorCode, MCPError } from '../domain/Errors.js';
 
 /**
- * Maps raw Shopware seo_url data to our domain list item
+ * Shopware SEO URL API response structure
  */
-function mapToListItem(raw: Record<string, unknown>): SeoUrlListItem {
+interface ShopwareSeoUrl {
+  id: string;
+  salesChannelId: string | null;
+  languageId: string;
+  foreignKey: string;
+  routeName: string;
+  pathInfo: string;
+  seoPathInfo: string;
+  isCanonical: boolean;
+  isModified: boolean;
+  isDeleted: boolean;
+  createdAt: string;
+  updatedAt: string;
+  salesChannel?: {
+    name: string;
+    translated?: {
+      name?: string;
+    };
+  } | null;
+}
+
+/**
+ * Maps Shopware seo_url data to our domain list item
+ */
+function mapToListItem(raw: ShopwareSeoUrl): SeoUrlListItem {
   return {
-    id: raw.id as string,
-    seoPathInfo: (raw.seoPathInfo as string) ?? '',
-    pathInfo: (raw.pathInfo as string) ?? '',
-    routeName: (raw.routeName as string) ?? '',
-    isCanonical: (raw.isCanonical as boolean) ?? false,
-    isModified: (raw.isModified as boolean) ?? false,
-    isDeleted: (raw.isDeleted as boolean) ?? false,
+    id: raw.id,
+    seoPathInfo: raw.seoPathInfo ?? '',
+    pathInfo: raw.pathInfo ?? '',
+    routeName: raw.routeName ?? '',
+    isCanonical: raw.isCanonical ?? false,
+    isModified: raw.isModified ?? false,
+    isDeleted: raw.isDeleted ?? false,
     salesChannelName: extractSalesChannelName(raw),
-    foreignKey: (raw.foreignKey as string) ?? '',
+    foreignKey: raw.foreignKey ?? '',
   };
 }
 
 /**
- * Maps raw Shopware seo_url data to our full domain entity
+ * Maps Shopware seo_url data to our full domain entity
  */
-function mapToSeoUrl(raw: Record<string, unknown>): SeoUrl {
+function mapToSeoUrl(raw: ShopwareSeoUrl): SeoUrl {
   return {
-    id: raw.id as string,
-    salesChannelId: (raw.salesChannelId as string) ?? null,
+    id: raw.id,
+    salesChannelId: raw.salesChannelId ?? null,
     salesChannelName: extractSalesChannelName(raw),
-    languageId: (raw.languageId as string) ?? '',
-    foreignKey: (raw.foreignKey as string) ?? '',
-    routeName: (raw.routeName as string) ?? '',
-    pathInfo: (raw.pathInfo as string) ?? '',
-    seoPathInfo: (raw.seoPathInfo as string) ?? '',
-    isCanonical: (raw.isCanonical as boolean) ?? false,
-    isModified: (raw.isModified as boolean) ?? false,
-    isDeleted: (raw.isDeleted as boolean) ?? false,
-    entityName: deriveEntityName(raw.routeName as string),
+    languageId: raw.languageId ?? '',
+    foreignKey: raw.foreignKey ?? '',
+    routeName: raw.routeName ?? '',
+    pathInfo: raw.pathInfo ?? '',
+    seoPathInfo: raw.seoPathInfo ?? '',
+    isCanonical: raw.isCanonical ?? false,
+    isModified: raw.isModified ?? false,
+    isDeleted: raw.isDeleted ?? false,
+    entityName: deriveEntityName(raw.routeName),
     entityIdentifier: null,
-    createdAt: (raw.createdAt as string) ?? '',
-    updatedAt: (raw.updatedAt as string) ?? '',
+    createdAt: raw.createdAt ?? '',
+    updatedAt: raw.updatedAt ?? '',
   };
 }
 
 /**
  * Extract sales channel name from nested association
  */
-function extractSalesChannelName(raw: Record<string, unknown>): string | null {
-  const sc = raw.salesChannel as Record<string, unknown> | undefined;
-  if (sc) {
-    const translated = sc.translated as Record<string, unknown> | undefined;
-    return (translated?.name as string) ?? (sc.name as string) ?? null;
+function extractSalesChannelName(raw: ShopwareSeoUrl): string | null {
+  if (raw.salesChannel) {
+    return raw.salesChannel.translated?.name ?? raw.salesChannel.name ?? null;
   }
   return null;
 }
@@ -142,7 +164,7 @@ export class SeoUrlService {
 
     this.logger.debug('Listing SEO URLs', { filters: filters.length });
 
-    const response = await this.api.search<Record<string, unknown>>('seo-url', criteria);
+    const response = await this.api.search<ShopwareSeoUrl>('seo-url', criteria);
 
     return {
       urls: response.data.map(mapToListItem),
@@ -186,7 +208,7 @@ export class SeoUrlService {
 
     this.logger.info('Starting SEO URL audit', { routeName: input.routeName, limit });
 
-    const response = await this.api.search<Record<string, unknown>>('seo-url', criteria);
+    const response = await this.api.search<ShopwareSeoUrl>('seo-url', criteria);
     const urls = response.data.map(mapToListItem);
     const issues: SeoUrlAuditIssue[] = [];
 
@@ -315,7 +337,7 @@ export class SeoUrlService {
       limit: 1,
     };
 
-    const response = await this.api.search<Record<string, unknown>>('seo-url', criteria);
+    const response = await this.api.search<ShopwareSeoUrl>('seo-url', criteria);
 
     const updated = response.data[0];
     if (!updated) {

@@ -16,6 +16,8 @@ import {
   MOCK_MAIL_TEMPLATE_ORDER,
   MOCK_MAIL_TEMPLATE_ORDER_ID,
   MOCK_MAIL_TEMPLATE_CUSTOMER,
+  MOCK_MAIL_TEMPLATE_CUSTOMER_ID,
+  MOCK_MAIL_TEMPLATE_CONTACT_ID,
   MOCK_MAIL_TEMPLATE_TYPE_ORDER,
   MOCK_MAIL_TEMPLATE_UPDATE_INPUT,
   MOCK_MAIL_TEMPLATE_SEND_TEST_INPUT,
@@ -691,6 +693,42 @@ describe('MailTemplateService', () => {
       });
 
       expect(result.success).toBe(true);
+    });
+
+    it('should enforce global rate limit across all templates (10 per minute)', async () => {
+      // Send 5 to template A (5 global)
+      for (let i = 0; i < 5; i++) {
+        await service.sendTest({
+          mailTemplateId: MOCK_MAIL_TEMPLATE_ORDER_ID,
+          recipient: 'test@example.com',
+        });
+      }
+
+      // Send 5 to template B (10 global)
+      for (let i = 0; i < 5; i++) {
+        await service.sendTest({
+          mailTemplateId: MOCK_MAIL_TEMPLATE_CUSTOMER_ID,
+          recipient: 'test@example.com',
+        });
+      }
+
+      // 11th call to template C should hit global limit
+      await expect(
+        service.sendTest({
+          mailTemplateId: MOCK_MAIL_TEMPLATE_CONTACT_ID,
+          recipient: 'test@example.com',
+        })
+      ).rejects.toThrow(MCPError);
+
+      try {
+        await service.sendTest({
+          mailTemplateId: MOCK_MAIL_TEMPLATE_CONTACT_ID,
+          recipient: 'test@example.com',
+        });
+      } catch (error) {
+        expect((error as MCPError).code).toBe(ErrorCode.RATE_LIMITED);
+        expect((error as MCPError).message).toContain('Global rate limit');
+      }
     });
   });
 

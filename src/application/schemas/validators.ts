@@ -29,11 +29,11 @@ export function shopwareId(errorMessage = 'Invalid Shopware ID format') {
       { message: errorMessage }
     )
     .transform((val) => {
-      // Convert standard UUID to hex format (remove dashes)
+      // Convert standard UUID to hex format (remove dashes) and normalize to lowercase
       if (STANDARD_UUID_REGEX.test(val)) {
-        return val.replace(/-/g, '');
+        return val.replace(/-/g, '').toLowerCase();
       }
-      return val;
+      return val.toLowerCase();
     });
 }
 
@@ -48,10 +48,11 @@ export function shopwareIdOptional(errorMessage = 'Invalid Shopware ID format') 
       { message: errorMessage }
     )
     .transform((val) => {
+      // Normalize to lowercase hex
       if (STANDARD_UUID_REGEX.test(val)) {
-        return val.replace(/-/g, '');
+        return val.replace(/-/g, '').toLowerCase();
       }
-      return val;
+      return val.toLowerCase();
     })
     .optional();
 }

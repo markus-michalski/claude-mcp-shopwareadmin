@@ -68,7 +68,7 @@ export class WikiJsService {
    * @returns The full documentation URL
    */
   buildDocUrl(system: string, slug: string, locale: string): string {
-    return `${this.baseUrl}/${locale}/${system}/${slug}`;
+    return `${this.baseUrl}/${encodeURIComponent(locale)}/${encodeURIComponent(system)}/${encodeURIComponent(slug)}`;
   }
 
   /**
@@ -83,6 +83,11 @@ export class WikiJsService {
   async checkDocumentation(
     params: CheckDocumentationParams
   ): Promise<DocumentationInfo | null> {
+    // Skip doc check if no Wiki.js URL is configured
+    if (!this.baseUrl) {
+      return null;
+    }
+
     const { system, slug, locale = 'de' } = params;
 
     // Check cache first

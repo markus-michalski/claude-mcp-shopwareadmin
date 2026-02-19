@@ -64,9 +64,9 @@ export class ShopwareApiClient {
     endpoint: string,
     body?: unknown,
     retryCount = 0
-  ): Promise<T> {
+  ): Promise<T | null> {
     const token = await this.authenticator.getAccessToken();
-    const url = `${this.baseUrl}${endpoint}`;
+    const url = new URL(endpoint, this.baseUrl).toString();
 
     this.logger.debug('API request', { method, endpoint, retryCount });
 
@@ -182,21 +182,21 @@ export class ShopwareApiClient {
   /**
    * GET request
    */
-  async get<T>(endpoint: string): Promise<T> {
+  async get<T>(endpoint: string): Promise<T | null> {
     return this.request<T>('GET', endpoint);
   }
 
   /**
    * POST request
    */
-  async post<T>(endpoint: string, body: unknown): Promise<T> {
+  async post<T>(endpoint: string, body: unknown): Promise<T | null> {
     return this.request<T>('POST', endpoint, body);
   }
 
   /**
-   * PATCH request
+   * PATCH request - returns null for 204 No Content responses
    */
-  async patch<T>(endpoint: string, body: unknown): Promise<T> {
+  async patch<T>(endpoint: string, body: unknown): Promise<T | null> {
     return this.request<T>('PATCH', endpoint, body);
   }
 
@@ -214,18 +214,27 @@ export class ShopwareApiClient {
     entity: string,
     criteria: SearchCriteria
   ): Promise<ShopwareSearchResponse<T>> {
-    return this.post<ShopwareSearchResponse<T>>(`/api/search/${entity}`, criteria);
+    const result = await this.post<ShopwareSearchResponse<T>>(`/api/search/${entity}`, criteria);
+    if (!result) {
+      throw new MCPError(
+        `Search for ${entity} returned empty response`,
+        ErrorCode.API_ERROR,
+        true,
+        'The Shopware API returned no data for the search request'
+      );
+    }
+    return result;
   }
 
   /**
    * Parse API response with empty body handling
    */
-  private async parseResponse<T>(response: Response): Promise<T> {
+  private async parseResponse<T>(response: Response): Promise<T | null> {
     const text = await response.text();
 
-    // Handle empty responses (common for DELETE, some PATCH)
+    // Return null for empty responses (common for DELETE, some PATCH with 204)
     if (!text) {
-      return {} as T;
+      return null;
     }
 
     try {
@@ -271,8 +280,11 @@ export class ShopwareApiClient {
 
     // Map HTTP status to appropriate error
     switch (response.status) {
-      case 404:
-        return MCPError.notFound('Resource', endpoint);
+      case 404: {
+        // Extract entity type from endpoint, don't expose full API path
+        const entityType = endpoint.split('/').filter(Boolean).pop()?.split('?')[0] ?? 'resource';
+        return MCPError.notFound('Resource', entityType);
+      }
       case 429:
         return new MCPError(
           'Rate limited by Shopware API',
@@ -298,12 +310,22 @@ export interface SearchCriteria {
   filter?: SearchFilter[];
   sort?: SearchSort[];
   associations?: Record<string, SearchCriteria | object>;
+  aggregations?: SearchAggregation[];
   limit?: number;
   page?: number;
   ids?: string[];
   term?: string;
   includes?: Record<string, string[]>;
 }
+
+/**
+ * Shopware search aggregation types
+ */
+export type SearchAggregation =
+  | { type: 'sum'; name: string; field: string }
+  | { type: 'count'; name: string; field: string }
+  | { type: 'avg'; name: string; field: string }
+  | { type: 'terms'; name: string; field: string; limit?: number; sort?: { field: string; order: 'ASC' | 'DESC' } };
 
 /**
  * Search filter types
@@ -314,7 +336,7 @@ export type SearchFilter =
   | { type: 'contains'; field: string; value: string }
   | { type: 'prefix'; field: string; value: string }
   | { type: 'suffix'; field: string; value: string }
-  | { type: 'range'; field: string; parameters: { gte?: number; lte?: number; gt?: number; lt?: number } }
+  | { type: 'range'; field: string; parameters: { gte?: number | string; lte?: number | string; gt?: number | string; lt?: number | string } }
   | { type: 'not'; field: string; value: unknown }
   | { type: 'multi'; operator: 'AND' | 'OR'; queries: SearchFilter[] };
 

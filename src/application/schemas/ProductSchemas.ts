@@ -16,6 +16,7 @@ export const ProductCreateInput = z.object({
     .describe('Product name'),
   productNumber: z
     .string()
+    .trim()
     .min(1, 'Product number is required')
     .max(64, 'Product number too long')
     .describe('Unique product number/SKU'),
@@ -70,6 +71,7 @@ export const ProductGetInput = z
     id: shopwareIdOptional('Invalid product ID format').describe('Product ID'),
     productNumber: z
       .string()
+      .trim()
       .min(1)
       .max(64)
       .optional()
@@ -160,7 +162,14 @@ export const ProductUpdateInput = z.object({
     'New manufacturer ID'
   ),
   customFields: z
-    .record(z.string(), z.unknown())
+    .record(
+      z.string().max(255),
+      z.union([z.string().max(5000), z.number(), z.boolean(), z.null()])
+    )
+    .refine(
+      (obj) => Object.keys(obj).length <= 50,
+      'Maximum 50 custom fields allowed'
+    )
     .optional()
     .describe('Custom fields as key-value object (e.g., {"custom_stickdatei_stickmaß": "12,0 x 14,8 cm"})'),
   // SEO fields
