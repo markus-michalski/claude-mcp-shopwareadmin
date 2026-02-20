@@ -138,7 +138,7 @@ export function loadConfig(): Config {
       defaultSalesChannelId: required('SHOPWARE_DEFAULT_SALES_CHANNEL_ID'),
     },
     wikijs: {
-      baseUrl: optional('WIKIJS_BASE_URL', 'https://faq.markus-michalski.net'),
+      baseUrl: optional('WIKIJS_BASE_URL', ''),
     },
     cache: {
       ttlCategories: parseIntEnv('CACHE_TTL_CATEGORIES', 3600000),

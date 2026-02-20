@@ -117,7 +117,8 @@ export class ShopwareAuthenticator {
     this.accessToken = data.access_token;
     this.tokenExpiresAt = Date.now() + data.expires_in * 1000;
 
-    this.logger.info('OAuth2 token acquired', {
+    this.logger.info('OAuth2 token acquired');
+    this.logger.debug('Token details', {
       expiresIn: data.expires_in,
       expiresAt: new Date(this.tokenExpiresAt).toISOString(),
     });

@@ -20,7 +20,6 @@ import type { InMemoryCache } from '../../infrastructure/cache/InMemoryCache.js'
 import type {
   MailTemplate,
   MailTemplateListItem,
-  MailTemplateType,
   SendTestMailResult,
 } from '../domain/MailTemplate.js';
 import type {
@@ -53,8 +52,9 @@ const MAIL_TEMPLATE_ASSOCIATIONS = {
  * Prevents email-bombing and spam
  */
 const SEND_TEST_RATE_LIMIT = {
-  maxCalls: 5,        // Max calls per window
-  windowMs: 60 * 1000, // 1 minute window
+  maxCallsPerTemplate: 5,   // Max calls per template per window
+  maxCallsGlobal: 10,       // Max calls across all templates per window
+  windowMs: 60 * 1000,      // 1 minute window
 };
 
 /**
@@ -89,10 +89,15 @@ interface ShopwareMailTemplate {
 
 export class MailTemplateService {
   /**
-   * Rate limit tracking for sendTest calls
+   * Per-template rate limit tracking for sendTest calls
    * Key: template ID, Value: call count and reset time
    */
   private readonly sendTestRateLimit = new Map<string, RateLimitEntry>();
+
+  /**
+   * Global rate limit tracking across all templates
+   */
+  private globalRateLimit: RateLimitEntry = { count: 0, resetAt: 0 };
 
   /**
    * Timer for cleaning up expired rate limit entries
@@ -106,9 +111,11 @@ export class MailTemplateService {
     private readonly defaultSalesChannelId: string
   ) {
     // Cleanup expired rate limit entries every minute
+    // .unref() prevents this interval from keeping Node.js alive on shutdown
     this.rateLimitCleanupInterval = setInterval(() => {
       this.cleanupExpiredRateLimits();
     }, SEND_TEST_RATE_LIMIT.windowMs);
+    this.rateLimitCleanupInterval.unref();
   }
 
   /**
@@ -358,12 +365,27 @@ export class MailTemplateService {
    */
   private checkSendTestRateLimit(templateId: string): void {
     const now = Date.now();
+
+    // Check global rate limit first
+    if (now >= this.globalRateLimit.resetAt) {
+      this.globalRateLimit = { count: 1, resetAt: now + SEND_TEST_RATE_LIMIT.windowMs };
+    } else if (this.globalRateLimit.count >= SEND_TEST_RATE_LIMIT.maxCallsGlobal) {
+      const secondsRemaining = Math.ceil((this.globalRateLimit.resetAt - now) / 1000);
+      throw new MCPError(
+        `Global rate limit exceeded: Maximum ${SEND_TEST_RATE_LIMIT.maxCallsGlobal} test emails per minute`,
+        ErrorCode.RATE_LIMITED,
+        true,
+        `Wait ${secondsRemaining} seconds before sending another test email`
+      );
+    } else {
+      this.globalRateLimit.count++;
+    }
+
+    // Check per-template rate limit
     const entry = this.sendTestRateLimit.get(templateId);
 
     if (entry) {
-      // Check if window has expired
       if (now >= entry.resetAt) {
-        // Reset counter
         this.sendTestRateLimit.set(templateId, {
           count: 1,
           resetAt: now + SEND_TEST_RATE_LIMIT.windowMs,
@@ -371,21 +393,18 @@ export class MailTemplateService {
         return;
       }
 
-      // Window still active, check count
-      if (entry.count >= SEND_TEST_RATE_LIMIT.maxCalls) {
+      if (entry.count >= SEND_TEST_RATE_LIMIT.maxCallsPerTemplate) {
         const secondsRemaining = Math.ceil((entry.resetAt - now) / 1000);
         throw new MCPError(
-          `Rate limit exceeded: Maximum ${SEND_TEST_RATE_LIMIT.maxCalls} test emails per minute for this template`,
+          `Rate limit exceeded: Maximum ${SEND_TEST_RATE_LIMIT.maxCallsPerTemplate} test emails per minute for this template`,
           ErrorCode.RATE_LIMITED,
           true,
           `Wait ${secondsRemaining} seconds before sending another test email`
         );
       }
 
-      // Increment counter
       entry.count++;
     } else {
-      // First call for this template
       this.sendTestRateLimit.set(templateId, {
         count: 1,
         resetAt: now + SEND_TEST_RATE_LIMIT.windowMs,

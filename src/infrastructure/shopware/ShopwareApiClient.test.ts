@@ -347,9 +347,9 @@ describe('ShopwareApiClient', () => {
         })
       );
 
-      // Should not throw, returns empty object
+      // Should not throw, returns null for empty body
       const result = await client.patch(`/api/product/${MOCK_PRODUCT.id}`, { active: true });
-      expect(result).toEqual({});
+      expect(result).toBeNull();
     });
 
     it('should throw for invalid JSON in successful response', async () => {

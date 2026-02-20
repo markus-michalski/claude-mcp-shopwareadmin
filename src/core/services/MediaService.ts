@@ -28,7 +28,6 @@ import type {
   MediaListInput,
   MediaGetInput,
   MediaUpdateInput,
-  MediaSearchInput,
   MediaAuditAltInput,
   MediaUploadUrlInput,
 } from '../../application/schemas/MediaSchemas.js';
@@ -495,11 +494,15 @@ export class MediaService {
     this.logger.info('Uploading media from URL', { url: input.url });
 
     // Extract filename and extension from URL
+    const ALLOWED_EXTENSIONS = new Set([
+      'jpg', 'jpeg', 'png', 'gif', 'webp', 'svg', 'bmp', 'tiff', 'tif', 'pdf', 'ico',
+    ]);
     const urlPath = new URL(input.url).pathname;
     const lastSegment = urlPath.split('/').pop() ?? 'upload';
     const dotIndex = lastSegment.lastIndexOf('.');
     const fileName = dotIndex > 0 ? lastSegment.substring(0, dotIndex) : lastSegment;
-    const fileExtension = dotIndex > 0 ? lastSegment.substring(dotIndex + 1) : 'jpg';
+    const rawExtension = dotIndex > 0 ? lastSegment.substring(dotIndex + 1).toLowerCase() : 'jpg';
+    const fileExtension = ALLOWED_EXTENSIONS.has(rawExtension) ? rawExtension : 'jpg';
 
     // Step 1: Create media entity
     const createPayload: Record<string, unknown> = {};
@@ -513,6 +516,14 @@ export class MediaService {
         '/api/media?_response=detail',
         createPayload
       );
+      if (!createResponse) {
+        throw new MCPError(
+          'Failed to create media entity: empty API response',
+          ErrorCode.API_ERROR,
+          true,
+          'The Shopware API returned no data when creating the media entity'
+        );
+      }
       mediaId = createResponse.data.id;
     } catch (error) {
       throw new MCPError(
@@ -526,7 +537,7 @@ export class MediaService {
     // Step 2: Upload from URL
     try {
       await this.api.post(
-        `/api/_action/media/${mediaId}/upload?extension=${fileExtension}&fileName=${encodeURIComponent(fileName)}`,
+        `/api/_action/media/${mediaId}/upload?extension=${encodeURIComponent(fileExtension)}&fileName=${encodeURIComponent(fileName)}`,
         { url: input.url }
       );
 

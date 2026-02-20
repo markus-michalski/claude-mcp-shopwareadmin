@@ -232,6 +232,13 @@ export class CrossSellingService {
         '/api/product-cross-selling?_response=detail',
         payload
       );
+      if (!response) {
+        throw new MCPError(
+          'Failed to create cross-selling: empty API response',
+          ErrorCode.API_ERROR,
+          true
+        );
+      }
 
       const created = await this.get({ id: response.data.id });
       if (!created) {

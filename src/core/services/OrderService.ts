@@ -257,15 +257,15 @@ export class OrderService {
       });
     }
 
-    // Filter by date range
+    // Filter by date range (ISO 8601 strings)
     if (input.dateFrom || input.dateTo) {
-      const rangeParams: Record<string, string> = {};
+      const rangeParams: { gte?: string; lte?: string } = {};
       if (input.dateFrom) rangeParams.gte = input.dateFrom;
       if (input.dateTo) rangeParams.lte = input.dateTo;
       filters.push({
         type: 'range',
         field: 'orderDateTime',
-        parameters: rangeParams as { gte?: number; lte?: number },
+        parameters: rangeParams,
       });
     }
 
@@ -355,85 +355,54 @@ export class OrderService {
       dateTo: input.dateTo,
     });
 
-    const criteria: SearchCriteria = {
-      limit: 1,
-      filter: [],
-      associations: {
-        stateMachineState: {},
-        transactions: {
-          associations: {
-            stateMachineState: {},
-          },
-        },
-        currency: {},
-      },
-    };
-
     const filters: SearchFilter[] = [];
 
-    // Date range filter
+    // Date range filter (ISO 8601 strings)
     if (input.dateFrom || input.dateTo) {
-      const rangeParams: Record<string, string> = {};
+      const rangeParams: { gte?: string; lte?: string } = {};
       if (input.dateFrom) rangeParams.gte = input.dateFrom;
       if (input.dateTo) rangeParams.lte = input.dateTo;
       filters.push({
         type: 'range',
         field: 'orderDateTime',
-        parameters: rangeParams as { gte?: number; lte?: number },
+        parameters: rangeParams,
       });
     }
 
-    criteria.filter = filters;
-
-    // Fetch all orders to compute stats (limited approach for now)
-    // For large shops, this should use aggregations
-    const allCriteria: SearchCriteria = {
-      ...criteria,
-      limit: 500,
+    // Use Shopware aggregations for server-side computation
+    const criteria: SearchCriteria = {
+      limit: 1,
+      filter: filters,
+      aggregations: [
+        { type: 'count', name: 'totalOrders', field: 'id' },
+        { type: 'sum', name: 'totalRevenue', field: 'amountTotal' },
+        { type: 'avg', name: 'avgOrderValue', field: 'amountTotal' },
+        { type: 'terms', name: 'orderStatus', field: 'stateMachineState.technicalName' },
+        { type: 'terms', name: 'paymentStatus', field: 'transactions.stateMachineState.technicalName' },
+      ],
       associations: {
-        stateMachineState: {},
-        transactions: {
-          associations: {
-            stateMachineState: {},
-          },
-        },
         currency: {},
       },
     };
 
-    const response = await this.api.search<ShopwareOrder>('order', allCriteria);
+    const response = await this.api.search<ShopwareOrder>('order', criteria);
 
-    // Compute statistics
-    let totalRevenue = 0;
-    const orderStatusCounts: Record<string, number> = {};
-    const paymentStatusCounts: Record<string, number> = {};
-    let currencySymbol = 'EUR';
+    const agg = response.aggregations ?? {};
 
-    for (const order of response.data) {
-      totalRevenue += order.amountTotal;
+    // Extract aggregation results with safe fallbacks
+    const totalOrders = this.extractCountAggregation(agg, 'totalOrders') ?? response.total;
+    const totalRevenue = this.extractSumAggregation(agg, 'totalRevenue') ?? 0;
+    const avgOrderValue = this.extractAvgAggregation(agg, 'avgOrderValue') ?? (totalOrders > 0 ? totalRevenue / totalOrders : 0);
+    const orderStatusCounts = this.extractTermsAggregation(agg, 'orderStatus');
+    const paymentStatusCounts = this.extractTermsAggregation(agg, 'paymentStatus');
 
-      // Currency from first order
-      if (order.currency?.symbol) {
-        currencySymbol = order.currency.symbol;
-      }
-
-      // Order status breakdown
-      const orderState = order.stateMachineState?.technicalName ?? 'unknown';
-      orderStatusCounts[orderState] = (orderStatusCounts[orderState] ?? 0) + 1;
-
-      // Payment status breakdown (from primary transaction)
-      const paymentState =
-        order.transactions?.[0]?.stateMachineState?.technicalName ?? 'unknown';
-      paymentStatusCounts[paymentState] = (paymentStatusCounts[paymentState] ?? 0) + 1;
-    }
-
-    const totalOrders = response.total;
-    const averageOrderValue = totalOrders > 0 ? totalRevenue / response.data.length : 0;
+    // Currency from first order (if any)
+    const currencySymbol = response.data[0]?.currency?.symbol ?? 'EUR';
 
     return {
       totalOrders,
       totalRevenue: Math.round(totalRevenue * 100) / 100,
-      averageOrderValue: Math.round(averageOrderValue * 100) / 100,
+      averageOrderValue: Math.round(avgOrderValue * 100) / 100,
       currencySymbol,
       byOrderStatus: orderStatusCounts,
       byPaymentStatus: paymentStatusCounts,
@@ -442,6 +411,44 @@ export class OrderService {
         to: input.dateTo ?? null,
       },
     };
+  }
+
+  /**
+   * Extract count value from Shopware aggregation result
+   */
+  private extractCountAggregation(agg: Record<string, unknown>, name: string): number | null {
+    const entry = agg[name] as { count?: number } | undefined;
+    return entry?.count ?? null;
+  }
+
+  /**
+   * Extract sum value from Shopware aggregation result
+   */
+  private extractSumAggregation(agg: Record<string, unknown>, name: string): number | null {
+    const entry = agg[name] as { sum?: number } | undefined;
+    return entry?.sum ?? null;
+  }
+
+  /**
+   * Extract avg value from Shopware aggregation result
+   */
+  private extractAvgAggregation(agg: Record<string, unknown>, name: string): number | null {
+    const entry = agg[name] as { avg?: number } | undefined;
+    return entry?.avg ?? null;
+  }
+
+  /**
+   * Extract terms buckets from Shopware aggregation result
+   */
+  private extractTermsAggregation(agg: Record<string, unknown>, name: string): Record<string, number> {
+    const entry = agg[name] as { buckets?: Array<{ key: string; count: number }> } | undefined;
+    const result: Record<string, number> = {};
+    if (entry?.buckets) {
+      for (const bucket of entry.buckets) {
+        result[bucket.key] = bucket.count;
+      }
+    }
+    return result;
   }
 
   // ===========================================================================
