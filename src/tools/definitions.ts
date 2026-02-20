@@ -107,7 +107,7 @@ export const toolDefinitions = [
       type: 'object',
       properties: {
         productId: { type: 'string', pattern: '^[0-9a-f]{32}$', description: 'Product ID (32-char hex)' },
-        style: { type: 'string', enum: ['creative', 'software'], description: 'Force specific style' },
+        style: { type: 'string', description: 'Content style profile name (e.g., "creative", "software"). Auto-detected from category if not specified.' },
         maxLength: { type: 'integer', minimum: 200, maximum: 5000, default: 1000, description: 'Max chars' },
         includeSnippets: { type: 'boolean', default: true, description: 'Include snippets (software only)' },
         snippetIds: { type: 'array', items: { type: 'string' }, description: 'Specific snippets to include' },
@@ -122,7 +122,7 @@ export const toolDefinitions = [
       type: 'object',
       properties: {
         productId: { type: 'string', pattern: '^[0-9a-f]{32}$', description: 'Product ID (32-char hex)' },
-        style: { type: 'string', enum: ['creative', 'software'], description: 'Force specific style' },
+        style: { type: 'string', description: 'Content style profile name (e.g., "creative", "software"). Auto-detected from category if not specified.' },
         maxTitleLength: { type: 'integer', minimum: 30, maximum: 70, default: 60, description: 'Max title length' },
         maxDescriptionLength: { type: 'integer', minimum: 100, maximum: 160, default: 155, description: 'Max description length' },
       },
@@ -191,7 +191,7 @@ export const toolDefinitions = [
       type: 'object',
       properties: {
         id: { type: 'string', pattern: '^[0-9a-f]{32}$', description: 'Category ID (32-char hex)' },
-        style: { type: 'string', enum: ['creative', 'software'], description: 'Force specific style' },
+        style: { type: 'string', description: 'Content style profile name (e.g., "creative", "software"). Auto-detected from category if not specified.' },
         maxLength: { type: 'integer', minimum: 100, maximum: 2000, default: 500, description: 'Max chars' },
       },
       required: ['id'],

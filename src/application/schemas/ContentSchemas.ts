@@ -13,9 +13,9 @@ export const ProductGenerateContentInput = z.object({
     'Product ID to generate content for'
   ),
   style: z
-    .enum(['creative', 'software'])
+    .string()
     .optional()
-    .describe('Content style (auto-detected from category if not specified)'),
+    .describe('Content style profile name (auto-detected from category if not specified)'),
   maxLength: z
     .number()
     .int()
@@ -40,9 +40,9 @@ export type ProductGenerateContentInput = z.infer<typeof ProductGenerateContentI
 export const ProductGenerateSeoInput = z.object({
   productId: shopwareId('Invalid product ID format').describe('Product ID'),
   style: z
-    .enum(['creative', 'software'])
+    .string()
     .optional()
-    .describe('Content style (auto-detected if not specified)'),
+    .describe('Content style profile name (auto-detected if not specified)'),
   maxTitleLength: z
     .number()
     .int()

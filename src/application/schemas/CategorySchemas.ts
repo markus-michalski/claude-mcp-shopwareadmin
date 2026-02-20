@@ -51,9 +51,9 @@ export type CategoryGetInput = z.infer<typeof CategoryGetInput>;
 export const CategoryGenerateContentInput = z.object({
   id: shopwareId('Invalid category ID format').describe('Category ID'),
   style: z
-    .enum(['creative', 'software'])
+    .string()
     .optional()
-    .describe('Content style (auto-detected if not specified)'),
+    .describe('Content style profile name (auto-detected if not specified)'),
   maxLength: z
     .number()
     .int()
