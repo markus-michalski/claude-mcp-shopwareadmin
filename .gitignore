@@ -33,3 +33,6 @@ coverage/
 
 # Shop-specific content profiles (copy from content-profiles.example.json)
 content-profiles.json
+
+# Internal architecture docs (not for repo)
+ARCHITECTURE.md

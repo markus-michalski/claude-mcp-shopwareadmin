@@ -1,163 +1,89 @@
 # claude-mcp-shopwareadmin
 
-MCP Server for Shopware 6 product and content management via Claude Code.
+MCP Server for Shopware 6 shop management via Claude Code. 43 specialized tools for products, content generation, SEO, media, orders, mail templates, and more.
 
-## Features
-
-### Product Management (6 Tools)
-- `product_create` - Create products (always inactive for safety)
-- `product_get` - Read product details with variants, media, properties
-- `product_list` - List products with filters (category, status, search)
-- `product_update` - Update product data (name, price, description, etc.)
-- `product_set_active` - Activate/deactivate products
-- `search_products` - Full-text search across products
-
-### Content Generation (4 Tools)
-- `product_generate_content` - Generate product description prompts with auto style detection
-- `product_generate_seo` - Generate SEO metadata (title, description, keywords)
-- `variant_generate_content` - Generate variant-specific descriptions
-- `content_update` - Save generated content to products
-
-### Category Management (3 Tools)
-- `category_list` - Browse category tree structure
-- `category_get` - Get category details with optional products
-- `category_generate_content` - Generate SEO text prompts for categories
-
-### Helper Functions (3 Tools)
-- `get_properties` - List available property groups and options
-- `get_manufacturers` - List manufacturers/brands
-- `snippet_list` - List product snippets (for software descriptions via mmd-product-snippets plugin)
-
-### Mail Template Management (4 Tools)
-- `mail_template_list` - List all mail templates (Order Confirmation, Customer Registration, etc.)
-- `mail_template_get` - Get template details by ID or technical name (e.g., `order_confirmation_mail`)
-- `mail_template_update` - Update subject, HTML body, plain text body (supports Twig syntax)
-- `mail_template_send_test` - Send test email with mock data (rate limited: 5/minute per template)
-
-**Total: 20 MCP Tools**
+**Docs DE:** [faq.markus-michalski.net/de/mcp/shopware-admin](https://faq.markus-michalski.net/de/mcp/shopware-admin)
+**Docs EN:** [faq.markus-michalski.net/en/mcp/shopware-admin](https://faq.markus-michalski.net/en/mcp/shopware-admin)
 
 ## Installation
 
 ```bash
-# Clone repository
-git clone <repo-url> claude-mcp-shopwareadmin
+git clone https://github.com/markus-michalski/claude-mcp-shopwareadmin.git
 cd claude-mcp-shopwareadmin
-
-# Install dependencies
 npm install
 
-# Configure
+# Environment konfigurieren
 cp .env.example .env
-# Edit .env with your Shopware credentials
+# .env mit Shopware-Zugangsdaten befuellen
 
-# Build
+# Optional: Content-Profile anpassen
+cp content-profiles.example.json content-profiles.json
+# content-profiles.json bearbeiten (siehe Content Profiles)
+
 npm run build
 ```
 
-## Configuration
+### Deployment
 
-Create a `.env` file with:
-
-```env
-SHOPWARE_URL=https://your-shop.com
-SHOPWARE_CLIENT_ID=SWIA...
-SHOPWARE_CLIENT_SECRET=...
-WIKIJS_BASE_URL=https://your-wiki.com
-LOG_LEVEL=info
+```bash
+mkdir -p ~/.claude/mcp-servers/shopwareadmin
+cp -r dist node_modules package.json .env ~/.claude/mcp-servers/shopwareadmin/
+# Optional: content-profiles.json mitkopieren
 ```
 
-### Shopware Integration Setup
-
-1. Go to Admin > Settings > System > Integrations
-2. Create new integration
-3. Set permissions:
-   - product: read, write
-   - category: read
-   - property_group: read
-   - product_manufacturer: read
-   - tax: read
-   - currency: read
-   - mail_template: read, write (for mail template tools)
-4. Copy Client ID and Secret to `.env`
-
-## Usage with Claude Code
-
-### Claude Code Configuration
-
-Add to `~/.claude/settings.json`:
-
-```json
-{
-  "mcpServers": {
-    "shopwareadmin": {
-      "command": "node",
-      "args": ["/home/YOUR_USER/.claude/mcp-servers/shopwareadmin/dist/index.js"],
-      "env": {}
-    }
-  }
-}
-```
-
-Or register via CLI:
+### Claude Code registrieren
 
 ```bash
 claude mcp add --scope user --transport stdio shopwareadmin -- \
   node ~/.claude/mcp-servers/shopwareadmin/dist/index.js
 ```
 
-### Example Usage
+## Update
 
-```
-> List all inactive products in category "Software"
-> Create a new product "ALTCHA Forms Plugin" with price 49.00 in category "Shopware 6"
-> Generate SEO description for product SW-ALTCHA-001
-> Activate product with ID abc-123
+```bash
+cd claude-mcp-shopwareadmin
+git pull
+npm install
+npm run build
 
-# Mail Templates
-> List all mail templates
-> Show me the order confirmation email template
-> Update the subject of the order confirmation mail to include the shop name
-> Send a test email for the customer registration template to test@example.com
+# Deployment aktualisieren
+cp -r dist node_modules package.json ~/.claude/mcp-servers/shopwareadmin/
 ```
 
-## Style Profiles
+## Content Profiles
 
-### Creative (Embroidery, Sewing, 3D Printing)
-- Tone: Personal, warm, emotional
-- Addressing: "du" (informal German)
-- Structure: Emotional intro > What is it > Technical details > Tips
+Die Content-Generierung nutzt konfigurierbare Style-Profile (Tonalitaet, Anrede, Struktur, Zielgruppe). Ohne eigene `content-profiles.json` werden die Built-in Defaults verwendet (creative + software).
 
-### Software (OXID, Shopware Plugins)
-- Tone: Professional, solution-oriented
-- Addressing: "Sie" (formal German)
-- Structure: Problem > Solution > Features (table) > Requirements > Docs
+Fuer eigene Profile:
 
-Style is auto-detected from category path:
-- `Software/*` -> software style
-- `Stickdateien/*` -> creative style
-- `Genaehtes/*` -> creative style
-- `3D-Druck/*` -> creative style
+```bash
+cp content-profiles.example.json content-profiles.json
+```
+
+Jedes Profil definiert:
+
+| Feld | Beschreibung | Beispiel |
+|------|-------------|----------|
+| `tonality` | Ton der Beschreibung | "Persoenlich, warm, emotional" |
+| `addressing` | Anrede: `du` oder `Sie` | "du" |
+| `structure` | Aufbau-Abschnitte | ["Einstieg", "Details", "Tipps"] |
+| `targetAudience` | Zielgruppe | "Hobbybastler, Kreative" |
+| `exampleIntro` | Beispiel-Einleitung | "Was waere Ostern ohne..." |
+| `includeSnippets` | Snippets einbinden | `true` / `false` |
+
+Profile werden ueber `categoryMapping` automatisch anhand der Produktkategorie erkannt. Der Stil kann auch manuell per `style`-Parameter erzwungen werden.
+
+Pfad konfigurierbar ueber `CONTENT_PROFILES_PATH` in `.env` (Default: `./content-profiles.json`).
 
 ## Development
 
 ```bash
-# Type check
-npm run typecheck
-
-# Build
-npm run build
-
-# Development mode
-npm run dev
-
-# Run tests
-npm test
+npm run typecheck   # TypeScript pruefen
+npm run build       # Kompilieren
+npm run dev         # Watch Mode
+npm test            # Tests (Vitest)
 ```
 
 ## License
 
-MIT
-
-## Author
-
-Markus Michalski
+MIT - Markus Michalski
