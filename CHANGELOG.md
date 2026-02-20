@@ -7,33 +7,60 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-### Security
-- C1: File extension allowlist + `encodeURIComponent` for media upload URLs
-- C2: `parseResponse<T>` returns `T | null` instead of unsafe `{} as T` cast
-- H1: SSRF blocklist expanded (IPv6, cloud metadata, decimal IPs, AWS shared ranges)
-- H2: `customFields` schema restricted (typed values, key length limits, max 50 entries)
-- H5: Global rate limit (10/min) for mail template test sends
-- H6: `setInterval.unref()` + graceful shutdown with `destroy()`
-- M5: Entity type in error messages instead of full API endpoint paths
-- M6: Token timing details moved to DEBUG log level
-- L4: `uncaughtException`/`unhandledRejection` handlers + SIGINT/SIGTERM graceful shutdown
+### Added
+- Nothing yet
 
 ### Changed
-- M1: URL construction via `new URL()` instead of string concatenation
-- M2: `SeoUrlService` uses typed `ShopwareSeoUrl` interface instead of `Record<string, unknown>`
-- M3: `OrderService.stats()` uses Shopware aggregations API instead of client-side computation
-- M4: `SearchFilter` range type accepts `string | number`, removed unsafe casts
-- M7: Wiki.js URL encoding with `encodeURIComponent`
-- H4: Refactored monolithic `index.ts` (1497 lines) into modular handler architecture (126 lines)
-- L1: Hex ID normalization to lowercase
-- L2: `productNumber` trim before validation
-- L3: Wiki.js default URL changed to empty string
+- Nothing yet
+
+### Deprecated
+- Nothing yet
+
+### Removed
+- Nothing yet
+
+### Fixed
+- Nothing yet
+
+### Security
+- Nothing yet
+
+## [1.1.0] - 2026-02-20
 
 ### Added
-- H3: Test coverage for MediaService, OrderService, SeoUrlService, CrossSellingService, FlowService (+156 tests, 379 total)
-- Modular tool handler structure under `src/tools/handlers/`
-- `src/bootstrap.ts` for service initialization
+- externalize content profiles as configurable JSON (#788631)
+- add SEO URL audit and management tools
+- add cross-selling management with AI suggestions
+- add read-only order tools (list, get, stats)
+- add 6 media management tools for BFSG compliance
+- add missing schema properties
+- Add Flow Builder management tools
+- Add mail template management tools
+- add tags and searchKeywords to product update
+- add SEO fields support to product update
+- Add customFields support to product_update tool
+- Add sales channel, tags and search keywords to product creation
+- Add configurable tax rate and fix product creation
+- Add category_update tool and fix Shopware ID validation
+- Initial implementation of claude-mcp-shopwareadmin
 
+### Changed
+- slim down README, remove ARCHITECTURE.md from repo
+- upgrade dev-dependencies (eslint 10, vitest 4)
+- update changelog with unreleased section link
+- add MIT license and changelog
+- remove security audit report from repo
+- added package-lock.json to gitignore
+
+### Fixed
+- update version to 1.0.0 in package.json
+- implement all 19 findings from security audit
+- harden API client, auth, validation and add CI
+- remove leftover locale references from snippet handlers
+- align SnippetService and ProductService tests with actual implementation
+- Include template content in sendTest payload
+- Use Sync API for product updates with customFields
+- Correct SnippetService for mmd-product-snippet plugin
 ## [0.1.0] - 2026-01-15
 
 ### Added
@@ -54,4 +81,5 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Wiki.js documentation link integration
 - InMemoryCache with TTL support
 
-[Unreleased]: https://github.com/markus-michalski/claude-mcp-shopwareadmin/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/markus-michalski/claude-mcp-shopwareadmin/compare/v1.1.0...HEAD
+[1.1.0]: https://github.com/markus-michalski/claude-mcp-shopwareadmin/releases/tag/v1.1.0
