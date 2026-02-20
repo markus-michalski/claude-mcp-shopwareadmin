@@ -5,7 +5,7 @@
  * No status changes, cancellations, or modifications.
  */
 import { z } from 'zod';
-import { shopwareId, shopwareIdOptional } from './validators.js';
+import { shopwareIdOptional } from './validators.js';
 
 // =============================================================================
 // Order Tool Input Schemas

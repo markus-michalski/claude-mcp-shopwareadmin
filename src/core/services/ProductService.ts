@@ -10,7 +10,7 @@
  * - search: Full-text search
  */
 import type { Logger } from '../../infrastructure/logging/Logger.js';
-import type { ShopwareApiClient, SearchCriteria, SearchFilter, ShopwareSearchResponse } from '../../infrastructure/shopware/ShopwareApiClient.js';
+import type { ShopwareApiClient, SearchCriteria, SearchFilter } from '../../infrastructure/shopware/ShopwareApiClient.js';
 import type { InMemoryCache } from '../../infrastructure/cache/InMemoryCache.js';
 import type {
   Product,

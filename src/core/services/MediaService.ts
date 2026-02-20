@@ -28,7 +28,6 @@ import type {
   MediaListInput,
   MediaGetInput,
   MediaUpdateInput,
-  MediaSearchInput,
   MediaAuditAltInput,
   MediaUploadUrlInput,
 } from '../../application/schemas/MediaSchemas.js';
