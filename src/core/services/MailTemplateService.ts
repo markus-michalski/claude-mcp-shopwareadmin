@@ -20,7 +20,6 @@ import type { InMemoryCache } from '../../infrastructure/cache/InMemoryCache.js'
 import type {
   MailTemplate,
   MailTemplateListItem,
-  MailTemplateType,
   SendTestMailResult,
 } from '../domain/MailTemplate.js';
 import type {
