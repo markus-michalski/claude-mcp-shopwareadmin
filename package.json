@@ -1,6 +1,6 @@
 {
   "name": "claude-mcp-shopwareadmin",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "description": "MCP Server for Shopware 6 product and content management via Claude Code",
   "type": "module",
   "main": "dist/index.js",
