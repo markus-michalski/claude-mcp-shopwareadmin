@@ -30,3 +30,6 @@ coverage/
 # Temporary files
 *.tmp
 *.temp
+
+# Shop-specific content profiles (copy from content-profiles.example.json)
+content-profiles.json

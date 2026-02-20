@@ -35,8 +35,11 @@ import { ShopwareApiClient } from '../../infrastructure/shopware/ShopwareApiClie
 import { ShopwareAuthenticator } from '../../infrastructure/shopware/ShopwareAuthenticator.js';
 import { InMemoryCache } from '../../infrastructure/cache/InMemoryCache.js';
 import { WikiJsService } from '../../infrastructure/wikijs/WikiJsService.js';
+import { BUILTIN_DEFAULTS } from '../../config/ContentProfilesDefaults.js';
+import { MCPError } from '../domain/Errors.js';
 import type { Logger } from '../../infrastructure/logging/Logger.js';
 import type { ContentStyle } from '../domain/Content.js';
+import type { ContentProfilesConfig } from '../../config/ContentProfilesSchema.js';
 
 describe('ContentService', () => {
   let contentService: ContentService;
@@ -66,7 +69,8 @@ describe('ContentService', () => {
       categoryService,
       snippetService,
       wikiService,
-      logger
+      logger,
+      BUILTIN_DEFAULTS
     );
   });
 
@@ -529,6 +533,195 @@ describe('ContentService', () => {
 
       // Context should include parent product info
       expect(prompt.context.name).toContain('Gallery');
+    });
+  });
+
+  // ===========================================================================
+  // getProfile() - Resolve style to profile
+  // ===========================================================================
+  describe('getProfile', () => {
+    it('should return profile for known style', () => {
+      const profile = contentService.getProfile('creative');
+
+      expect(profile.style).toBe('creative');
+      expect(profile.tonality).toBe(BUILTIN_DEFAULTS.profiles.creative.tonality);
+    });
+
+    it('should throw MCPError for unknown style', () => {
+      expect(() => contentService.getProfile('nonexistent')).toThrow(MCPError);
+      expect(() => contentService.getProfile('nonexistent')).toThrow('Unknown content style');
+    });
+
+    it('should list available styles in error message', () => {
+      try {
+        contentService.getProfile('nonexistent');
+      } catch (error) {
+        expect(error).toBeInstanceOf(MCPError);
+        expect((error as MCPError).message).toContain('creative');
+        expect((error as MCPError).message).toContain('software');
+      }
+    });
+  });
+
+  // ===========================================================================
+  // getAvailableStyles()
+  // ===========================================================================
+  describe('getAvailableStyles', () => {
+    it('should return all loaded profile names', () => {
+      const styles = contentService.getAvailableStyles();
+
+      expect(styles).toContain('creative');
+      expect(styles).toContain('software');
+      expect(styles).toHaveLength(2);
+    });
+  });
+
+  // ===========================================================================
+  // Custom profiles support
+  // ===========================================================================
+  describe('custom profiles', () => {
+    let customService: ContentService;
+
+    const customConfig: ContentProfilesConfig = {
+      language: 'en',
+      defaultProfile: 'professional',
+      profiles: {
+        professional: {
+          tonality: 'Formal and precise',
+          addressing: 'Sie',
+          structure: ['Overview', 'Features', 'Specifications'],
+          targetAudience: 'Business customers',
+          exampleIntro: 'Introducing our solution.',
+          includeSnippets: true,
+        },
+        casual: {
+          tonality: 'Friendly and relaxed',
+          addressing: 'du',
+          structure: ['Hook', 'Benefits', 'Call to action'],
+          targetAudience: 'Young adults',
+          exampleIntro: 'Hey there!',
+          includeSnippets: false,
+        },
+        luxury: {
+          tonality: 'Elegant and exclusive',
+          addressing: 'Sie',
+          structure: ['Aspiration', 'Craftsmanship', 'Heritage'],
+          targetAudience: 'Premium customers',
+          exampleIntro: 'Experience excellence.',
+          includeSnippets: false,
+        },
+      },
+      categoryMapping: {
+        Electronics: 'professional',
+        Fashion: 'casual',
+        Jewelry: 'luxury',
+      },
+    };
+
+    beforeEach(() => {
+      const authenticator = new ShopwareAuthenticator(
+        BASE_URL,
+        'test-client-id',
+        'test-client-secret',
+        logger
+      );
+      const customClient = new ShopwareApiClient(BASE_URL, authenticator, logger);
+      const customCache = new InMemoryCache(logger);
+      customService = new ContentService(
+        new ProductService(customClient, customCache, logger),
+        new CategoryService(customClient, customCache, logger),
+        new SnippetService(customClient, customCache, logger),
+        new WikiJsService('https://faq.example.com', customCache, logger),
+        logger,
+        customConfig
+      );
+    });
+
+    it('should support 3+ custom profiles', () => {
+      expect(customService.getAvailableStyles()).toEqual(['professional', 'casual', 'luxury']);
+    });
+
+    it('should use custom default profile for unknown categories', () => {
+      const style = customService.detectStyleFromBreadcrumb(['Unknown', 'Category']);
+
+      expect(style).toBe('professional');
+    });
+
+    it('should use custom category mapping', () => {
+      const style = customService.detectStyleFromBreadcrumb(['Root', 'Jewelry', 'Rings']);
+
+      expect(style).toBe('luxury');
+    });
+
+    it('should resolve custom profiles by name', () => {
+      const profile = customService.getProfile('luxury');
+
+      expect(profile.tonality).toBe('Elegant and exclusive');
+      expect(profile.includeSnippets).toBe(false);
+    });
+
+    it('should include snippets based on profile config, not style name', async () => {
+      server.use(
+        http.post(`${BASE_URL}/api/search/product`, () => {
+          return HttpResponse.json({
+            data: [{
+              ...MOCK_PRODUCT_SOFTWARE,
+              categories: [{ ...MOCK_CATEGORY_GALLERY, name: 'Electronics', breadcrumb: ['Root', 'Electronics'] }],
+            }],
+            total: 1,
+          });
+        }),
+        http.post(`${BASE_URL}/api/search/category`, () => {
+          return HttpResponse.json({
+            data: [{ ...MOCK_CATEGORY_GALLERY, name: 'Electronics', breadcrumb: ['Root', 'Electronics'] }],
+            total: 1,
+          });
+        }),
+        http.post(`${BASE_URL}/api/search/mmd-product-snippet`, () => {
+          return HttpResponse.json({
+            data: MOCK_SNIPPET_LIST_ACTIVE,
+            total: 3,
+          });
+        })
+      );
+
+      const prompt = await customService.generateContentPrompt({
+        productId: MOCK_PRODUCT_ID,
+        maxLength: 1000,
+        includeSnippets: true,
+      });
+
+      // professional profile has includeSnippets: true
+      expect(prompt.availableSnippets.length).toBeGreaterThan(0);
+    });
+
+    it('should NOT include snippets when profile has includeSnippets: false', async () => {
+      server.use(
+        http.post(`${BASE_URL}/api/search/product`, () => {
+          return HttpResponse.json({
+            data: [{
+              ...MOCK_PRODUCT_CREATIVE,
+              categories: [{ ...MOCK_CATEGORY_STICKDATEIEN, name: 'Fashion', breadcrumb: ['Root', 'Fashion'] }],
+            }],
+            total: 1,
+          });
+        }),
+        http.post(`${BASE_URL}/api/search/category`, () => {
+          return HttpResponse.json({
+            data: [{ ...MOCK_CATEGORY_STICKDATEIEN, name: 'Fashion', breadcrumb: ['Root', 'Fashion'] }],
+            total: 1,
+          });
+        })
+      );
+
+      const prompt = await customService.generateContentPrompt({
+        productId: 'prod-osterhase-uuid',
+        maxLength: 1000,
+        includeSnippets: true,
+      });
+
+      // casual profile has includeSnippets: false
+      expect(prompt.availableSnippets).toEqual([]);
     });
   });
 

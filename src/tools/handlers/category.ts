@@ -41,6 +41,10 @@ export function categoryHandlers(services: ServiceContainer): Record<string, Too
       }
       const breadcrumb = await services.category.getBreadcrumb(input.id);
       const style = input.style ?? services.content.detectStyleFromBreadcrumb(breadcrumb);
+      const profile = services.content.getProfile(style);
+      const instructions = profile.addressing === 'Sie'
+        ? `Generate professional SEO text. Use formal Sie-Form. Tonality: ${profile.tonality}. Target audience: ${profile.targetAudience}.`
+        : `Generate engaging SEO text. Use informal Du-Form. Tonality: ${profile.tonality}. Target audience: ${profile.targetAudience}.`;
       return {
         content: [{
           type: 'text',
@@ -52,9 +56,7 @@ export function categoryHandlers(services: ServiceContainer): Record<string, Too
             },
             style,
             maxLength: input.maxLength ?? 500,
-            instructions: style === 'software'
-              ? 'Generate professional SEO text. Use formal Sie-Form. Focus on benefits for shop owners/developers.'
-              : 'Generate engaging SEO text. Use informal Du-Form. Focus on creativity and emotion.',
+            instructions,
           }, null, 2),
         }],
       };

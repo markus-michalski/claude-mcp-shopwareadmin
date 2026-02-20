@@ -4,6 +4,10 @@
  * IMPORTANT: This service does NOT generate content itself!
  * It prepares prompts that Claude then uses for actual generation.
  *
+ * Content profiles (style, tonality, structure, etc.) are loaded from
+ * an external content-profiles.json config file. Falls back to built-in
+ * defaults when no config file is present.
+ *
  * Implements content methods:
  * - detectStyle: Determine style from category breadcrumb
  * - generateContentPrompt: Generate prompt for product description
@@ -16,21 +20,20 @@ import type { ProductService } from './ProductService.js';
 import type { CategoryService } from './CategoryService.js';
 import type { SnippetService } from './SnippetService.js';
 import type { Product } from '../domain/Product.js';
-import {
-  CATEGORY_STYLE_MAP,
-  STYLE_PROFILES,
-  type ContentStyle,
-  type StyleProfile,
-  type ProductContext,
-  type ContentGenerationPrompt,
-  type SeoGenerationPrompt,
-  type SnippetInfo,
+import type {
+  ContentStyle,
+  StyleProfile,
+  ProductContext,
+  ContentGenerationPrompt,
+  SeoGenerationPrompt,
+  SnippetInfo,
 } from '../domain/Content.js';
 import type {
   ProductGenerateContentInput,
   ProductGenerateSeoInput,
   VariantGenerateContentInput,
 } from '../../application/schemas/ContentSchemas.js';
+import type { ContentProfilesConfig } from '../../config/ContentProfilesSchema.js';
 import { MCPError, ErrorCode } from '../domain/Errors.js';
 
 /**
@@ -42,13 +45,64 @@ const DEFAULT_SEO_CONSTRAINTS = {
 };
 
 export class ContentService {
+  private readonly profiles: Record<string, StyleProfile>;
+  private readonly categoryMapping: Record<string, string>;
+  private readonly defaultProfile: string;
+
   constructor(
     private readonly productService: ProductService,
     private readonly categoryService: CategoryService,
     private readonly snippetService: SnippetService,
     private readonly wikiService: WikiJsService,
-    private readonly logger: Logger
-  ) {}
+    private readonly logger: Logger,
+    profilesConfig: ContentProfilesConfig
+  ) {
+    // Build runtime StyleProfile objects from config
+    this.profiles = {};
+    for (const [name, config] of Object.entries(profilesConfig.profiles)) {
+      this.profiles[name] = {
+        style: name,
+        tonality: config.tonality,
+        addressing: config.addressing,
+        structure: [...config.structure],
+        targetAudience: config.targetAudience,
+        exampleIntro: config.exampleIntro,
+        includeSnippets: config.includeSnippets,
+      };
+    }
+    this.categoryMapping = { ...profilesConfig.categoryMapping };
+    this.defaultProfile = profilesConfig.defaultProfile;
+  }
+
+  // ===========================================================================
+  // getProfile() - Resolve a style name to its StyleProfile
+  // ===========================================================================
+
+  /**
+   * Get a StyleProfile by name, with error handling for unknown styles
+   *
+   * @param style - Profile name to resolve
+   * @returns The matching StyleProfile
+   * @throws MCPError if the style name doesn't match any loaded profile
+   */
+  getProfile(style: string): StyleProfile {
+    const profile = this.profiles[style];
+    if (!profile) {
+      throw new MCPError(
+        `Unknown content style: "${style}". Available: ${this.getAvailableStyles().join(', ')}`,
+        ErrorCode.INVALID_INPUT,
+        false
+      );
+    }
+    return profile;
+  }
+
+  /**
+   * Get all available style profile names
+   */
+  getAvailableStyles(): string[] {
+    return Object.keys(this.profiles);
+  }
 
   // ===========================================================================
   // detectStyle() - Determine style from category breadcrumb
@@ -57,11 +111,11 @@ export class ContentService {
   /**
    * Detect content style based on product's category path
    *
-   * Uses CATEGORY_STYLE_MAP to determine if content should be
-   * 'creative' (personal, warm, du) or 'software' (professional, sachlich, Sie)
+   * Uses configured categoryMapping to determine which profile
+   * applies to a product based on its category breadcrumb.
    *
    * @param productId - Product ID to analyze
-   * @returns Detected content style
+   * @returns Detected content style name
    */
   async detectStyle(productId: string): Promise<ContentStyle> {
     this.logger.debug('Detecting style for product', { productId });
@@ -79,17 +133,20 @@ export class ContentService {
     // Get first category (primary)
     const primaryCategory = product.categories[0];
     if (!primaryCategory) {
-      this.logger.warn('Product has no category, defaulting to creative', { productId });
-      return 'creative';
+      this.logger.warn('Product has no category, using default profile', {
+        productId,
+        defaultProfile: this.defaultProfile,
+      });
+      return this.defaultProfile;
     }
 
     // Get full breadcrumb from category
     const categoryId = primaryCategory.id;
     const breadcrumb = await this.categoryService.getBreadcrumb(categoryId);
 
-    // Check each breadcrumb segment against style map
+    // Check each breadcrumb segment against category mapping
     for (const segment of breadcrumb) {
-      const mappedStyle = CATEGORY_STYLE_MAP[segment];
+      const mappedStyle = this.categoryMapping[segment];
       if (mappedStyle) {
         this.logger.info('Style detected from breadcrumb', {
           productId,
@@ -100,25 +157,28 @@ export class ContentService {
       }
     }
 
-    // Default to creative if no match
-    this.logger.debug('No style match found, defaulting to creative', { productId });
-    return 'creative';
+    // Default profile if no match
+    this.logger.debug('No style match found, using default profile', {
+      productId,
+      defaultProfile: this.defaultProfile,
+    });
+    return this.defaultProfile;
   }
 
   /**
    * Detect content style from a breadcrumb path (synchronous helper)
    *
    * @param breadcrumb - Category breadcrumb array
-   * @returns Detected content style
+   * @returns Detected content style name
    */
   detectStyleFromBreadcrumb(breadcrumb: string[]): ContentStyle {
     for (const segment of breadcrumb) {
-      const mappedStyle = CATEGORY_STYLE_MAP[segment];
+      const mappedStyle = this.categoryMapping[segment];
       if (mappedStyle) {
         return mappedStyle;
       }
     }
-    return 'creative';
+    return this.defaultProfile;
   }
 
   // ===========================================================================
@@ -151,14 +211,14 @@ export class ContentService {
 
     // Determine style (use override or detect)
     const style = input.style ?? (await this.detectStyle(productId));
-    const profile = STYLE_PROFILES[style];
+    const profile = this.getProfile(style);
 
     // Build product context
     const context = this.buildProductContext(product);
 
-    // Get available snippets for software style
+    // Get available snippets if profile has snippets enabled
     let availableSnippets: SnippetInfo[] = [];
-    if (style === 'software' && includeSnippets) {
+    if (profile.includeSnippets && includeSnippets) {
       availableSnippets = await this.fetchSnippetInfo(snippetIds);
     }
 
@@ -209,7 +269,7 @@ export class ContentService {
 
     // Determine style (use override or detect)
     const style = input.style ?? (await this.detectStyle(productId));
-    const profile = STYLE_PROFILES[style];
+    const profile = this.getProfile(style);
 
     // Build category path
     const categoryPath = product.categories[0]?.path ?? '';
@@ -282,7 +342,7 @@ export class ContentService {
 
     // Determine style
     const style = await this.detectStyle(product.id);
-    const profile = STYLE_PROFILES[style];
+    const profile = this.getProfile(style);
 
     // Build context including variant info
     const context = this.buildProductContext(product);
@@ -383,7 +443,7 @@ export class ContentService {
     }
     lines.push('');
 
-    lines.push(`## Stil: ${profile.style === 'creative' ? 'Kreativ' : 'Software'}`);
+    lines.push(`## Stil: ${profile.style}`);
     lines.push(`- Tonalitaet: ${profile.tonality}`);
     lines.push(`- Ansprache: ${profile.addressing}`);
     lines.push(`- Zielgruppe: ${profile.targetAudience}`);
@@ -443,7 +503,7 @@ export class ContentService {
     lines.push(`- Kategorie: ${product.categories[0]?.path ?? 'N/A'}`);
     lines.push('');
 
-    lines.push(`## Stil: ${profile.style === 'creative' ? 'Kreativ' : 'Software'}`);
+    lines.push(`## Stil: ${profile.style}`);
     lines.push(`- Tonalitaet: ${profile.tonality}`);
     lines.push(`- Zielgruppe: ${profile.targetAudience}`);
     lines.push('');
@@ -495,7 +555,7 @@ export class ContentService {
       lines.push('');
     }
 
-    lines.push(`## Stil: ${profile.style === 'creative' ? 'Kreativ' : 'Software'}`);
+    lines.push(`## Stil: ${profile.style}`);
     lines.push(`- Tonalitaet: ${profile.tonality}`);
     lines.push('');
 

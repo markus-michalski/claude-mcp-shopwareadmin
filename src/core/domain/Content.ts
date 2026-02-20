@@ -1,10 +1,10 @@
 /**
- * Content style types
+ * Content style identifier (dynamic, defined in content-profiles.json)
  */
-export type ContentStyle = 'creative' | 'software';
+export type ContentStyle = string;
 
 /**
- * Style profile configuration
+ * Style profile configuration for content generation
  */
 export interface StyleProfile {
   style: ContentStyle;
@@ -13,50 +13,8 @@ export interface StyleProfile {
   structure: string[];
   targetAudience: string;
   exampleIntro: string;
+  includeSnippets: boolean;
 }
-
-/**
- * Predefined style profiles for content generation
- */
-export const STYLE_PROFILES: Record<ContentStyle, StyleProfile> = {
-  creative: {
-    style: 'creative',
-    tonality: 'Persoenlich, warm, emotional',
-    addressing: 'du',
-    structure: [
-      'Emotionaler Einstieg (Frage/Anekdote)',
-      'Was ist es?',
-      'Technische Details (Format, Groesse)',
-      'Anwendungstipps',
-    ],
-    targetAudience: 'Hobbybastler, Kreative, DIY-Enthusiasten',
-    exampleIntro: 'Was waere denn Ostern ohne den Osterhasen?',
-  },
-  software: {
-    style: 'software',
-    tonality: 'Professionell, sachlich, loesungsorientiert',
-    addressing: 'Sie',
-    structure: [
-      'Problem-Statement',
-      'Loesungsansatz',
-      'Feature-Tabelle',
-      'Systemanforderungen',
-      'Dokumentations-Links',
-    ],
-    targetAudience: 'Shop-Betreiber, Entwickler, Agenturen',
-    exampleIntro: 'Spam-Schutz ohne Google, ohne Cookies, ohne Bild-Puzzles.',
-  },
-};
-
-/**
- * Category path to style mapping
- */
-export const CATEGORY_STYLE_MAP: Record<string, ContentStyle> = {
-  'Software': 'software',
-  'Stickdateien': 'creative',
-  'Genaehtes': 'creative',
-  '3D-Druck': 'creative',
-};
 
 /**
  * Product context for content generation

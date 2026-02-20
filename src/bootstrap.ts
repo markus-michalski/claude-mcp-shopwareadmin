@@ -1,4 +1,5 @@
 import { loadConfig, validateConfig } from './config/Configuration.js';
+import { loadContentProfiles } from './config/ContentProfilesLoader.js';
 import { Logger } from './infrastructure/logging/Logger.js';
 import { InMemoryCache } from './infrastructure/cache/InMemoryCache.js';
 import { ShopwareAuthenticator } from './infrastructure/shopware/ShopwareAuthenticator.js';
@@ -53,12 +54,14 @@ export function bootstrap(): BootstrapResult {
   const snippetService = new SnippetService(shopwareApi, cache, logger);
   const manufacturerService = new ManufacturerService(shopwareApi, cache, logger);
   const propertyService = new PropertyService(shopwareApi, cache, logger);
+  const contentProfiles = loadContentProfiles(logger);
   const contentService = new ContentService(
     productService,
     categoryService,
     snippetService,
     wikiService,
-    logger
+    logger,
+    contentProfiles
   );
   const mailTemplateService = new MailTemplateService(
     shopwareApi,
