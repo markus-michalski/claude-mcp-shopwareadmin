@@ -53,3 +53,5 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Rate limiting for mail test sends
 - Wiki.js documentation link integration
 - InMemoryCache with TTL support
+
+[Unreleased]: https://github.com/markus-michalski/claude-mcp-shopwareadmin/compare/v0.1.0...HEAD
